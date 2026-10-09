@@ -79,7 +79,7 @@ export function VerticalLayout() {
 
   /* ── 键盘：↑↓ 换顺序，回车改字，⌘Z 撤销 ── */
   const onKey = (e: React.KeyboardEvent) => {
-    if ((e.target as HTMLElement).isContentEditable) return; // 在改字：方向键、删除键是给文字的
+    if ((e.target as HTMLElement).isContentEditable || (e.target as HTMLElement).tagName === 'TEXTAREA') return; // 在改字：方向键、删除键是给文字的
     const mod = e.metaKey || e.ctrlKey;
     if (mod && e.key.toLowerCase() === 'z') { e.preventDefault(); if (e.shiftKey) L.hist.redo(); else L.hist.undo(); return; }
     if (!selected) return;

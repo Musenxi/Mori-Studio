@@ -17,6 +17,7 @@ import { assetName } from '@/components/asset-picker';
 import { Tip } from '@/components/tip';
 import { useLayout, type PlaceInfo } from './layout-ctx';
 import { Deco, Unit, useEditHost } from './layout-text';
+import { asSpans, compact, spansToText, textToSpans } from '@/lib/inline.js';
 
 export type { PlaceInfo };
 export const clamp = (v: number, a: number, b: number) => Math.min(b, Math.max(a, v));
@@ -153,7 +154,7 @@ export function HorizontalLayout() {
 
   /* ── 键盘：↑↓ 上下位置，←→ 换顺序，+ − 大小，回车改字，⌘Z 撤销 ── */
   const onKey = (e: React.KeyboardEvent) => {
-    if ((e.target as HTMLElement).isContentEditable) return; // 在改字：方向键、删除键是给文字的
+    if ((e.target as HTMLElement).isContentEditable || (e.target as HTMLElement).tagName === 'TEXTAREA') return; // 在改字：方向键、删除键是给文字的
     const mod = e.metaKey || e.ctrlKey;
     if (mod && e.key.toLowerCase() === 'z') { e.preventDefault(); if (e.shiftKey) L.hist.redo(); else L.hist.undo(); return; }
     if (!selected) return;
@@ -336,6 +337,7 @@ export function StripFace({ b, H, fs, rtl, active, onPatch }: { b: Doc; H: numbe
 
 export function FreeFace({ b, h, fs, active, onPatch }: { b: Doc; h: number; fs: number; active: boolean; onPatch: (p: Doc) => void }) {
   const { items, start } = useItemDrag<Doc>(b.items ?? [], (next) => onPatch({ items: next }));
+  const [typing, setTyping] = useState<number | null>(null);
   const W = h * (b.ar ?? 1.6);
   const top = Math.max(1, ...items.map((it) => it.z ?? 1));
   const drag = (e: React.PointerEvent, i: number, mode: 'move' | 'size') => {
@@ -355,14 +357,33 @@ export function FreeFace({ b, h, fs, active, onPatch }: { b: Doc; h: number; fs:
           {active && <Knob onDown={(e) => drag(e, i, 'size')} />}
         </span>
       ) : (
-        <p key={i} className={cn('serif absolute top-[calc(var(--y)*100%)] left-[calc(var(--x)*100%)] z-999 text-(length:--fs) text-soft-foreground', it.writing === 'h' ? 'w-[calc(var(--tw)*100%)] leading-[1.8] tracking-[.04em]' : 'leading-[1.9] tracking-[.26em] [writing-mode:vertical-rl]', active && 'cursor-move outline outline-1 outline-dashed outline-offset-2 outline-foreground/30')}
+        <p key={i} className={cn('serif absolute top-[calc(var(--y)*100%)] left-[calc(var(--x)*100%)] z-999 text-(length:--fs) text-soft-foreground', it.writing === 'h' ? 'w-[calc(var(--tw)*100%)] leading-[1.8] tracking-[.04em]' : 'leading-[1.9] tracking-[.26em] [writing-mode:vertical-rl]', active && (typing === i ? 'outline outline-1 outline-offset-2 outline-primary' : 'cursor-move outline outline-1 outline-offset-2 outline-primary/60 hover:outline-primary'))}
           style={{ '--x': it.x, '--y': it.y, '--tw': it.w ?? 0.3, '--fs': px(fs * 0.85) }}
-          onPointerDown={active ? (e) => drag(e, i, 'move') : undefined}>
-          {it.text?.length ? <Spans text={it.text} /> : active && <span className="text-muted-foreground/60">文本框</span>}
-          {active && it.writing === 'h' && <Knob onDown={(e) => drag(e, i, 'size')} />}
+          onPointerDown={active && typing !== i ? (e) => drag(e, i, 'move') : undefined}
+          onDoubleClick={active ? (e) => { e.stopPropagation(); setTyping(i); } : undefined}>
+          {typing === i
+            ? <TextBox value={it.text} h={it.writing === 'h'} onDone={(text) => { setTyping(null); if (text !== undefined) onPatch({ items: items.map((x, k) => (k === i ? { ...x, text } : x)) }); }} />
+            : it.text?.length ? <Spans text={it.text} /> : active && <span className="text-muted-foreground/60">文本框</span>}
+          {active && typing !== i && it.writing === 'h' && <Knob onDown={(e) => drag(e, i, 'size')} />}
         </p>
       ))}
     </div>
+  );
+}
+
+/** 自由排布里文本框的就地编辑：和侧栏的输入框一样用轻量标记；失焦（或 ⌘↵）保存，Esc 放弃 */
+function TextBox({ value, h, onDone }: { value: unknown; h: boolean; onDone: (text?: unknown) => void }) {
+  const [text, setText] = useState(() => spansToText(asSpans(value)));
+  const done = useRef(false);
+  const finish = (save: boolean) => { if (done.current) return; done.current = true; onDone(save ? compact(textToSpans(text)) : undefined); };
+  return (
+    <textarea autoFocus value={text} rows={1} spellCheck={false}
+      onFocus={(e) => e.currentTarget.setSelectionRange(text.length, text.length)}
+      onChange={(e) => setText(e.target.value)}
+      onBlur={() => finish(true)}
+      onKeyDown={(e) => { e.stopPropagation(); if (e.key === 'Escape') finish(false); else if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) finish(true); }}
+      onPointerDown={(e) => e.stopPropagation()}
+      className={cn('block resize-none overflow-hidden bg-transparent p-0 text-inherit outline-none [field-sizing:content] [font:inherit] [letter-spacing:inherit] [line-height:inherit]', h ? 'w-full' : 'min-h-[3em] min-w-[1.6em] [writing-mode:vertical-rl]')} />
   );
 }
 
