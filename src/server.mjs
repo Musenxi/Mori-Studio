@@ -285,7 +285,7 @@ export async function startStudio({ root, port = 4400, dev = false }) {
       let mm;
 
       /* ── 评论管理 ── */
-      if ((mm = m(/^\/api\/comments(?:\/(stats|token|seen|settings|(\d+)))?$/))) {
+      if ((mm = m(/^\/api\/comments(?:\/(stats|token|seen|settings|spam|(\d+)))?$/))) {
         try {
           if (!mm[1] && req.method === 'GET') return send(res, 200, await admin('GET', `/comments?limit=300${url.searchParams.get('status') ? `&status=${url.searchParams.get('status')}` : ''}`));
           // 以博主身份发评论 / 回复：名字、邮箱、网址取 mori.config.ts 的 author
@@ -295,6 +295,7 @@ export async function startStudio({ root, port = 4400, dev = false }) {
             if (!a.name) return send(res, 400, { error: '还没有填作者名字（设定 → 作者）' });
             return send(res, 201, await admin('POST', '/comments', { entry, body, parentId, name: a.name, email: a.email, url: a.url }));
           }
+          if (mm[1] === 'spam' && req.method === 'DELETE') return send(res, 200, await admin('DELETE', '/spam'));
           if (mm[1] === 'settings' && req.method === 'GET') return send(res, 200, await admin('GET', '/settings'));
           if (mm[1] === 'settings' && req.method === 'PUT') return send(res, 200, await admin('PUT', '/settings', await readJson(req)));
           if (mm[1] === 'stats' && req.method === 'GET') return send(res, 200, await admin('GET', '/stats'));

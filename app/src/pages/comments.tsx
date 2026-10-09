@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Check, EyeOff, RefreshCw, Reply, Trash2 } from 'lucide-react';
+import { Ban, Check, EyeOff, RefreshCw, Reply, Trash2 } from 'lucide-react';
 import { Link } from 'react-router';
 import { toast } from 'sonner';
 import { ApiError, api, type CommentRow } from '@/lib/api';
@@ -15,7 +15,7 @@ import { Body, Empty, PageHeader } from '@/components/page';
 import { Segmented } from '@/components/segmented';
 import { CommentBody } from '@/components/comment-body';
 
-const TABS = [['all', '全部'], ['pending', '待审'], ['approved', '已通过'], ['hidden', '已隐藏']] as const;
+const TABS = [['all', '全部'], ['pending', '待审'], ['approved', '已通过'], ['hidden', '已隐藏'], ['spam', '垃圾箱']] as const;
 type Tab = (typeof TABS)[number][0];
 const when = (t: number) => { const d = new Date(t); const p = (n: number) => String(n).padStart(2, '0'); return `${d.getFullYear()}.${p(d.getMonth() + 1)}.${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`; };
 
@@ -83,7 +83,10 @@ function List() {
 
   return (
     <>
-      <PageHeader title="评论" actions={<Button variant="ghost" size="sm" onClick={() => void reload()}><RefreshCw size={14} className={cn(list.isFetching && 'animate-spin')} />刷新</Button>} />
+      <PageHeader title="评论" actions={<>
+        {tab === 'spam' && rows.length > 0 && <Button variant="ghost-danger" size="sm" onClick={async () => { if (await confirm({ title: '清空垃圾箱？', description: `${stats.data?.spam ?? rows.length} 条评论会永久删除，不能恢复。`, confirmLabel: '清空', danger: true })) void act(() => api.clearSpam()); }}><Trash2 size={14} />清空垃圾箱</Button>}
+        <Button variant="ghost" size="sm" onClick={() => void reload()}><RefreshCw size={14} className={cn(list.isFetching && 'animate-spin')} />刷新</Button>
+      </>} />
       <Body>
         <Segmented className="mb-4" value={tab} onValueChange={setTab} options={TABS.map(([k, n]) => { const c = stats.data && (k === 'all' ? stats.data.pending + stats.data.approved + stats.data.hidden : stats.data[k]); return { value: k, label: c ? `${n} ${c}` : n }; })} />
         {list.error && !(list.error instanceof ApiError && list.error.status === 401) && <p className="my-4 rounded-lg bg-muted px-3.5 py-2.5 text-destructive">{(list.error as Error).message}</p>}
@@ -108,9 +111,10 @@ function List() {
                 {m.quote && <blockquote className="my-2.5 rounded-lg bg-foreground/[.05] px-3.5 py-2 text-13 text-soft-foreground">{m.quote}</blockquote>}
                 <CommentBody text={m.body} />
                 <div className="-ml-2.5 mt-2 flex gap-1">
-                  {m.status !== 'hidden' && <Button variant="ghost" size="sm" onClick={() => setReplying(replying === m.id ? null : m.id)}><Reply size={14} />回复</Button>}
+                  {m.status !== 'hidden' && m.status !== 'spam' && <Button variant="ghost" size="sm" onClick={() => setReplying(replying === m.id ? null : m.id)}><Reply size={14} />回复</Button>}
                   {m.status !== 'approved' && <Button variant="ghost" size="sm" onClick={() => act(() => api.setCommentStatus(m.id, 'approved'))}><Check size={14} />通过</Button>}
                   {m.status !== 'hidden' && <Button variant="ghost" size="sm" onClick={() => act(() => api.setCommentStatus(m.id, 'hidden'))}><EyeOff size={14} />隐藏</Button>}
+                  {m.status !== 'spam' && <Button variant="ghost" size="sm" onClick={() => act(() => api.setCommentStatus(m.id, 'spam'))}><Ban size={14} />垃圾</Button>}
                   <Button variant="ghost-danger" size="sm" onClick={async () => { if (await confirm({ title: '永久删除这条评论？', description: '它下面的回复也会一起删除，不能恢复。', confirmLabel: '删除', danger: true })) void act(() => api.removeComment(m.id)); }}><Trash2 size={14} />删除</Button>
                 </div>
                 {replying === m.id && <ReplyBox to={m} onDone={async () => { setReplying(null); await reload(); }} onCancel={() => setReplying(null)} />}

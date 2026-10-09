@@ -24,7 +24,7 @@ export interface GitInfo { isRepo: boolean; top?: string; nested?: boolean; bran
 /** 防垃圾规则（存在评论服务里）：屏蔽词、IP 段、网址、昵称 */
 export interface SpamRules { words: string[]; ips: string[]; urls: string[]; names: string[] }
 
-export interface CommentRow { id: number; entry: string; name: string; avatar?: string | null; url?: string | null; email?: string | null; ip?: string | null; author?: boolean; body: string; createdAt: number; status: 'pending' | 'approved' | 'hidden'; block?: string | null; quote?: string | null; parentId?: number | null }
+export interface CommentRow { id: number; entry: string; name: string; avatar?: string | null; url?: string | null; email?: string | null; ip?: string | null; author?: boolean; body: string; createdAt: number; status: 'pending' | 'approved' | 'hidden' | 'spam'; block?: string | null; quote?: string | null; parentId?: number | null }
 
 /** 长任务（构建 / 发布）：输出一路推给 onChunk，结束时返回退出码 */
 async function stream(url: string, onChunk: (all: string) => void): Promise<number> {
@@ -81,12 +81,13 @@ export const api = {
   removeAsset: (name: string) => req<{ ok: true }>('DELETE', `/api/asset/${encodeURIComponent(name)}`),
 
   comments: (status?: string) => req<{ comments: CommentRow[] }>('GET', `/api/comments${status ? `?status=${status}` : ''}`),
-  commentStats: () => req<{ pending: number; approved: number; hidden: number }>('GET', '/api/comments/stats'),
+  commentStats: () => req<{ pending: number; approved: number; hidden: number; spam: number }>('GET', '/api/comments/stats'),
   commentSettings: () => req<{ spam: SpamRules }>('GET', '/api/comments/settings'),
   setCommentSettings: (spam: SpamRules) => req<{ spam: SpamRules }>('PUT', '/api/comments/settings', { spam }),
   postComment: (entry: string, body: string, parentId?: number) => req('POST', '/api/comments', { entry, body, parentId }),
   setCommentStatus: (id: number, status: string) => req('PATCH', `/api/comments/${id}`, { status }),
   removeComment: (id: number) => req('DELETE', `/api/comments/${id}`),
+  clearSpam: () => req<{ removed: number }>('DELETE', '/api/comments/spam'),
   setCommentToken: (token: string) => req('PUT', '/api/comments/token', { token }),
   markCommentsSeen: () => req('POST', '/api/comments/seen'),
 

@@ -12,7 +12,7 @@ import { Body, PageHeader } from '@/components/page';
 
 const RECENT = 6;
 const when = (t: number) => { const d = new Date(t), p = (n: number) => String(n).padStart(2, '0'); return `${p(d.getMonth() + 1)}.${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`; };
-const STATUS: Record<CommentRow['status'], string | null> = { pending: '待审', approved: null, hidden: '已隐藏' };
+const STATUS: Record<CommentRow['status'], string | null> = { pending: '待审', approved: null, hidden: '已隐藏', spam: '垃圾' };
 
 interface Cell { label: string; value: string | number | null | undefined; to?: string; hint?: string; alert?: boolean }
 
