@@ -1,8 +1,8 @@
 {
   "name": "mori-studio",
   "version": "0.0.1",
-  "description": "MORI Studio — 本地写作与排版编辑器（读写项目里的内容文件，不需要 git）。",
-  "license": "GPL-3.0-only",
+  "description": "MORI Studio — MORI 博客的本地写作与排版编辑器（读写项目里的内容文件，不需要 git）。",
+  "license": "MIT",
   "type": "module",
   "bin": {
     "mori-studio": "./bin/mori-studio.mjs"
@@ -14,8 +14,8 @@
   ],
   "scripts": {
     "start": "node bin/mori-studio.mjs",
-    "test": "node --test test/*.test.mjs",
-    "dev": "node bin/mori-studio.mjs --dev --root ../..",
+    "test": "node --import ./test/setup.mjs --test test/*.test.mjs",
+    "dev": "node bin/mori-studio.mjs --dev",
     "dev:ui": "vite --config app/vite.config.ts",
     "build:ui": "vite build --config app/vite.config.ts",
     "check:ui": "tsc -p app",
@@ -26,7 +26,6 @@
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
     "@tanstack/react-query": "^5.104.0",
-    "astro-mori": "workspace:*",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "exif-reader": "^2.0.3",
@@ -58,5 +57,12 @@
     "eslint-plugin-react-hooks": "^7.1.1",
     "tailwindcss": "^4.3.3",
     "typescript": "^6.0.3"
+  },
+  "packageManager": "pnpm@10.30.1",
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "sharp"
+    ]
   }
 }

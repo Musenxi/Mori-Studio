@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
+import { join } from 'node:path';
 import { spansToText, textToSpans, compact } from '../app/src/lib/inline.js';
 
 const roundTrip = (spans) => textToSpans(spansToText(spans));
@@ -27,7 +27,7 @@ test('解析', () => {
 });
 
 test('站点里所有真实的行内文字都能无损往返', (t) => {
-  const dir = fileURLToPath(new URL('../../../src/content/', import.meta.url));
+  const dir = join(process.env.MORI_THEME, 'src/content/');
   const posts = existsSync(dir + 'posts') ? readdirSync(dir + 'posts').filter((f) => f.endsWith('.json')) : [];
   if (!posts.length) return t.skip('src/content 里还没有文章');
   let n = 0;
