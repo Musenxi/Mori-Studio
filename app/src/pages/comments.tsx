@@ -13,8 +13,9 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Body, Empty, PageHeader } from '@/components/page';
 import { Segmented } from '@/components/segmented';
+import { CommentBody } from '@/components/comment-body';
 
-const TABS = [['pending', '待审'], ['approved', '已通过'], ['hidden', '已隐藏']] as const;
+const TABS = [['all', '全部'], ['pending', '待审'], ['approved', '已通过'], ['hidden', '已隐藏']] as const;
 type Tab = (typeof TABS)[number][0];
 const when = (t: number) => { const d = new Date(t); const p = (n: number) => String(n).padStart(2, '0'); return `${d.getFullYear()}.${p(d.getMonth() + 1)}.${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`; };
 
@@ -65,9 +66,9 @@ function List() {
   const refresh = useRefresh();
   const confirm = useConfirm();
   const qc = useQueryClient();
-  const [tab, setTab] = useState<Tab>('pending');
+  const [tab, setTab] = useState<Tab>('all');
   const [replying, setReplying] = useState<number | null>(null);
-  const list = useQuery({ queryKey: ['comments', tab], queryFn: () => api.comments(tab), staleTime: 0 });
+  const list = useQuery({ queryKey: ['comments', tab], queryFn: () => api.comments(tab === 'all' ? undefined : tab), staleTime: 0 });
   const stats = useQuery({ queryKey: ['comment-stats'], queryFn: api.commentStats, staleTime: 0 });
   // 评论记的是 posts/<id> 或 pages/<id>，和 Studio 编辑器的路由一样；文章已经删了就只显示文字
   const title = (entry: string) => { const [kind, id] = entry.split('/'); return (kind === 'pages' ? project?.pages : project?.entries)?.find((e) => e.id === id)?.title; };
@@ -84,7 +85,7 @@ function List() {
     <>
       <PageHeader title="评论" actions={<Button variant="ghost" size="sm" onClick={() => void reload()}><RefreshCw size={14} className={cn(list.isFetching && 'animate-spin')} />刷新</Button>} />
       <Body>
-        <Segmented className="mb-4" value={tab} onValueChange={setTab} options={TABS.map(([k, n]) => ({ value: k, label: stats.data && stats.data[k] ? `${n} ${stats.data[k]}` : n }))} />
+        <Segmented className="mb-4" value={tab} onValueChange={setTab} options={TABS.map(([k, n]) => { const c = stats.data && (k === 'all' ? stats.data.pending + stats.data.approved + stats.data.hidden : stats.data[k]); return { value: k, label: c ? `${n} ${c}` : n }; })} />
         {list.error && !(list.error instanceof ApiError && list.error.status === 401) && <p className="my-4 rounded-lg bg-muted px-3.5 py-2.5 text-destructive">{(list.error as Error).message}</p>}
         <div className="space-y-3">
           {rows.map((m) => (
@@ -105,7 +106,7 @@ function List() {
                   {m.parentId && <span className="mono rounded-full bg-foreground/[.06] px-2 py-px text-11">回复 #{m.parentId}</span>}
                 </div>
                 {m.quote && <blockquote className="my-2.5 rounded-lg bg-foreground/[.05] px-3.5 py-2 text-13 text-soft-foreground">{m.quote}</blockquote>}
-                <p className="my-1.5 whitespace-pre-wrap break-words">{m.body}</p>
+                <CommentBody text={m.body} />
                 <div className="-ml-2.5 mt-2 flex gap-1">
                   {m.status !== 'hidden' && <Button variant="ghost" size="sm" onClick={() => setReplying(replying === m.id ? null : m.id)}><Reply size={14} />回复</Button>}
                   {m.status !== 'approved' && <Button variant="ghost" size="sm" onClick={() => act(() => api.setCommentStatus(m.id, 'approved'))}><Check size={14} />通过</Button>}

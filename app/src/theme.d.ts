@@ -2,6 +2,7 @@
 declare module 'astro-mori/flow';
 declare module 'astro-mori/markdown';
 declare module 'astro-mori/avatar';
+declare module 'astro-mori/comment-md';
 declare module 'astro-mori/lucide' {
   export type IconNode = Array<[string, Record<string, string | number>]>;
   export const iconNode: (name: string) => IconNode | undefined;

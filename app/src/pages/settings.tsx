@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { api } from '@/lib/api';
+import { api, type SpamRules } from '@/lib/api';
 import { useProject, useRefresh } from '@/lib/hooks';
 import { Field } from '@/components/field';
 import { Button } from '@/components/ui/button';
@@ -11,6 +12,11 @@ import { Segmented } from '@/components/segmented';
 import { SwitchField } from '@/components/switch-field';
 import { cn } from '@/lib/cn';
 import { autosaveSeconds, setAutosaveSeconds } from '@/lib/prefs';
+
+/** 防垃圾规则：每行一条，存在评论服务里 */
+const SPAM: Array<[keyof SpamRules, string]> = [['words', '屏蔽词'], ['ips', '屏蔽 IP'], ['urls', '屏蔽网址'], ['names', '屏蔽昵称']];
+const spamText = (r: SpamRules) => Object.fromEntries(SPAM.map(([k]) => [k, r[k].join('\n')])) as Record<keyof SpamRules, string>;
+const spamLines = (s: string) => s.split('\n').map((l) => l.trim()).filter(Boolean);
 
 const PRESETS: Array<[string, string]> = [['#002fa7', '克莱因蓝'], ['#b0442b', '朱'], ['#3f6b4f', '松绿'], ['#5b3f8c', '紫']];
 // 和主题里的推导一致：亮色下亮度封顶，暗色下亮度托底（都在 OKLCH 里，色相和饱和度不变）
@@ -30,6 +36,11 @@ export default function Settings() {
   const [auto, setAuto] = useState(String(autosaveSeconds()));
   const [edits, setEdits] = useState<Record<string, string>>({}); // 还没保存的、用选项改的设定（键是配置路径）
   const [busy, setBusy] = useState(false);
+  const qc = useQueryClient();
+  const spamOn = project?.comments.provider === 'mori' && project.comments.hasToken;
+  const spamQ = useQuery({ queryKey: ['comment-settings'], queryFn: api.commentSettings, enabled: !!spamOn, retry: false });
+  const [spam, setSpam] = useState<Record<keyof SpamRules, string> | null>(null);
+  useEffect(() => { if (spamQ.data) setSpam(spamText(spamQ.data.spam)); }, [spamQ.data]);
   useEffect(() => { if (cfg) { setTitle(cfg.title); setDescription(cfg.description ?? ''); setAccent(cfg.accent); setAccentDark(cfg.accentDark ?? ''); setOverride(!!cfg.accentDark); } }, [cfg?.title, cfg?.description, cfg?.accent, cfg?.accentDark]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (cfg) setHead(cfg.head ?? ''); }, [cfg?.head]); // eslint-disable-line react-hooks/exhaustive-deps
   if (!cfg) return null;
@@ -39,7 +50,8 @@ export default function Settings() {
   const put = (key: string, value: string) => setEdits((e) => ({ ...e, [key]: value }));
   const autoN = Math.min(3600, Math.max(1, Math.round(Number(auto)) || 60));
   const accentDarkNow = override ? accentDark : '';
-  const dirty = (title && title !== cfg.title) || description !== (cfg.description ?? '') || accent !== cfg.accent || accentDarkNow !== (cfg.accentDark ?? '') || Object.keys(edits).length > 0 || autoN !== autosaveSeconds() || head.trim() !== (cfg.head ?? '');
+  const spamDirty = !!(spam && spamQ.data && SPAM.some(([k]) => spamLines(spam[k]).join('\n') !== spamQ.data.spam[k].join('\n')));
+  const dirty = spamDirty || (title && title !== cfg.title) || description !== (cfg.description ?? '') || accent !== cfg.accent || accentDarkNow !== (cfg.accentDark ?? '') || Object.keys(edits).length > 0 || autoN !== autosaveSeconds() || head.trim() !== (cfg.head ?? '');
 
   const save = async () => {
     setBusy(true);
@@ -50,6 +62,11 @@ export default function Settings() {
       if (accentDarkNow !== (cfg.accentDark ?? '')) await api.setConfig('accentDark', accentDarkNow || null);
       for (const [k, v] of Object.entries(edits)) await api.setConfig(k, v);
       if (head.trim() !== (cfg.head ?? '')) await api.setConfig('head', head.trim() || null);
+      if (spam && spamDirty) {
+        const r = await api.setCommentSettings(Object.fromEntries(SPAM.map(([k]) => [k, spamLines(spam[k])])) as unknown as SpamRules);
+        qc.setQueryData(['comment-settings'], r);
+        setSpam(spamText(r.spam));
+      }
       setAutosaveSeconds(autoN); setAuto(String(autoN));
       setEdits({});
       await refresh();
@@ -105,6 +122,15 @@ export default function Settings() {
             <Field label="头像服务">
               <Segmented value={edits['comments.avatar'] ?? avatarKey} onValueChange={(v) => put('comments.avatar', v)} options={[{ value: 'cravatar', label: 'Cravatar' }, { value: 'gravatar', label: 'Gravatar' }, { value: 'none', label: '不显示' }]} />
             </Field>
+            {!project.comments.hasToken
+              ? <p className="pt-2 text-soft-foreground">防垃圾规则要先在评论页填管理令牌。</p>
+              : spamQ.error
+                ? <p className="pt-2 text-destructive">{(spamQ.error as Error).message}</p>
+                : spam && SPAM.map(([k, label]) => (
+                  <Field key={k} label={label}>
+                    <Textarea rows={3} spellCheck={false} value={spam[k]} onChange={(e) => setSpam({ ...spam, [k]: e.target.value })} placeholder={k === 'ips' ? '1.2.3.4\n1.2.3.*\n10.0.0.0/8' : undefined} />
+                  </Field>
+                ))}
           </Card></Section>
         )}
 
