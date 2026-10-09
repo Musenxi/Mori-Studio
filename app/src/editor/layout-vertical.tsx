@@ -9,7 +9,7 @@ import { cn } from '@/lib/cn';
 import type { Doc } from '@/lib/types';
 import * as ops from '@/lib/layout-ops.js';
 import { useLayout, type PlaceInfo } from './layout-ctx';
-import { FreeFace, hereOf, Img, MiniMap, StripFace, TextFace, VPOS, caption, clamp, px, rowsOf } from './layout-view';
+import { Cap, FreeFace, hereOf, Img, MiniMap, StripFace, TextFace, VPOS, clamp, px, rowsOf } from './layout-view';
 
 interface Drag { key: string; dy?: number; slot?: number; line?: number }
 
@@ -155,7 +155,7 @@ function VBlock({ b, W, seq, selected, editing, drag, onDown, onOpen, children }
 }
 
 function VFace({ b, W, fs, places, here, active, editing, onPatch }: { b: Doc; W: number; fs: number; places: PlaceInfo[]; here?: number; active: boolean; editing: boolean; onPatch: (p: Doc) => void }) {
-  const cap = (text: string) => text && <p className="mt-2 max-w-full truncate text-(length:--fs) text-muted-foreground" style={{ '--fs': px(fs * 0.78) }}>{text}</p>;
+  const cap = (text?: string) => <Cap text={text} size={fs * 0.78} />;
   switch (b.type) {
     case 'text': case 'head': {
       const v = b.vwriting === 'v';
@@ -165,20 +165,19 @@ function VFace({ b, W, fs, places, here, active, editing, onPatch }: { b: Doc; W
     case 'image':
       return <figure><Img src={b.src} className="max-h-(--mh) w-full" style={{ '--mh': px(W * 0.7) }} />{cap(b.caption)}</figure>;
     case 'pair':
-      return <figure><div className="grid grid-cols-2 gap-(--g)" style={{ '--g': px(W * 0.012) }}>{b.images.map((im: Doc, i: number) => <Img key={i} src={im.src} className="aspect-[4/3] w-full" />)}</div>{cap(caption(b.images))}</figure>;
+      return <figure><div className="grid grid-cols-2 gap-(--g)" style={{ '--g': px(W * 0.012) }}>{b.images.map((im: Doc, i: number) => <figure key={i}><Img src={im.src} className="aspect-[4/3] w-full" />{cap(im.caption)}</figure>)}</div></figure>;
     case 'grid': {
       const n = b.images.length;
       return (
         <figure>
           <div className="grid grid-cols-3 gap-(--g)" style={{ '--g': px(W * 0.009) }}>
-            {b.images.map((im: Doc, i: number) => <Img key={i} src={im.src} className={cn('aspect-[4/3] h-full w-full', i === 0 && 'col-span-2 row-span-2', i === n - 1 && n > 1 && i !== 0 && 'aspect-auto')} />)}
+            {b.images.map((im: Doc, i: number) => <figure key={i} className={cn('flex min-w-0 flex-col', i === 0 && 'col-span-2 row-span-2')}><Img src={im.src} className={cn('min-h-0 w-full flex-1 aspect-[4/3]', i === n - 1 && n > 1 && i !== 0 && 'aspect-auto')} />{cap(im.caption)}</figure>)}
           </div>
-          {cap(caption(b.images))}
         </figure>
       );
     }
     case 'strip':
-      return <div className="overflow-x-auto [scrollbar-width:none]"><StripFace b={b} H={W * 0.32} fs={fs} rtl={false} active={active} onPatch={onPatch} />{cap(caption(b.images))}</div>;
+      return <div className="overflow-x-auto [scrollbar-width:none]"><StripFace b={b} H={W * 0.32} fs={fs} rtl={false} active={active} onPatch={onPatch} /></div>;
     case 'free':
       return <FreeFace b={b} h={W / (b.ar ?? 1.6)} fs={fs} active={active} onPatch={onPatch} />;
     case 'map':

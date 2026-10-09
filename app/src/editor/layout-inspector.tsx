@@ -230,14 +230,17 @@ function ImageProps({ b, patch, typePatch }: { b: Doc; patch: (p: Doc) => void; 
         ))}
         {b.type === 'free' && (b.items ?? []).map((it: Doc, i: number) => it.kind === 'text' && (
           <div key={`t${i}`} className="flex gap-2.5">
-            <InlineField className="min-w-0 flex-1" rows={1} value={it.text} placeholder="竖排小字" onChange={(v) => typePatch({ items: b.items.map((x: Doc, k: number) => (k === i ? { ...x, text: v } : x)) })} />
+            <div className="min-w-0 flex-1 space-y-1.5">
+              <InlineField className="min-w-0" rows={2} value={it.text} placeholder="文本框" onChange={(v) => typePatch({ items: b.items.map((x: Doc, k: number) => (k === i ? { ...x, text: v } : x)) })} />
+              <Segmented size="sm" value={it.writing === 'h' ? 'h' : 'v'} onValueChange={(v) => patch({ items: b.items.map((x: Doc, k: number) => (k === i ? { ...x, writing: v, ...(v === 'h' && !x.w ? { w: 0.3 } : {}) } : x)) })} options={[{ value: 'h', label: '横排' }, { value: 'v', label: '竖排' }]} />
+            </div>
             <button type="button" aria-label="移除" onClick={() => patch({ items: b.items.filter((_: Doc, k: number) => k !== i) })} className="grid h-6 w-6 shrink-0 place-items-center rounded-full text-muted-foreground hover:bg-foreground/[.06] hover:text-destructive"><X size={13} /></button>
           </div>
         ))}
         {b.type !== 'image' && b.type !== 'pair' && (
           <div className="flex gap-1">
             <Button size="sm" variant="ghost" className="-ml-3" onClick={add}><Plus size={13} />图片</Button>
-            {b.type === 'free' && <Button size="sm" variant="ghost" onClick={() => patch({ items: [...b.items, { kind: 'text', text: '', x: 0.85, y: 0.1 }] })}><Plus size={13} />竖排小字</Button>}
+            {b.type === 'free' && <Button size="sm" variant="ghost" onClick={() => patch({ items: [...b.items, { kind: 'text', text: '', x: 0.1, y: 0.1, writing: 'h', w: 0.3 }] })}><Plus size={13} />文本框</Button>}
           </div>
         )}
       </Section>

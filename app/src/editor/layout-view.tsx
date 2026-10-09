@@ -272,7 +272,8 @@ export function Img({ src, style, className }: { src?: string; style?: React.CSS
   return <img src={imgSrc(src)} alt="" draggable={false} loading="lazy" className={cn('block max-w-none bg-muted object-cover', className)} style={style} />;
 }
 
-export const caption = (list: Doc[]) => list.map((i) => i.caption).filter(Boolean).join(' / ');
+/** 图下面的一行图注；宽度跟着图走（w-0 min-w-full），不把图撑宽 */
+export const Cap = ({ text, size }: { text?: string; size: number }) => text ? <p className="mt-1.5 w-0 min-w-full text-(length:--fs) leading-snug text-muted-foreground" style={{ '--fs': px(size) }}>{text}</p> : null;
 
 /** 行内文字（不能编辑的地方用，比如自由排布里的小字）：粗、斜、代码、链接照样显示，旁注只留一个小记号，地点前面有个定位图标 */
 export function Spans({ text, dots = true }: { text: unknown; dots?: boolean }) {
@@ -321,8 +322,11 @@ export function StripFace({ b, H, fs, rtl, active, onPatch }: { b: Doc; H: numbe
         return (
           <span key={i} className={cn('relative mt-(--mt) block', active && 'cursor-ns-resize outline outline-1 outline-offset-2 outline-foreground/20 hover:outline-foreground/50')} style={{ '--mt': px(H * o) }}
             onPointerDown={active ? (e) => start(e, (_dx, dy) => put(i, { offset: r2(clamp(o + dy / H, -0.5, 0.5)) })) : undefined}>
-            <Img src={im.src} className="h-(--h) w-auto" style={{ '--h': px(H * s) }} />
-            {active && <Knob onDown={(e) => { const h0 = H * s; start(e, (_dx, dy) => put(i, { scale: r2(clamp((s * (h0 + dy)) / h0, 0.3, 1.6)) })); }} />}
+            <span className="relative block">
+              <Img src={im.src} className="h-(--h) w-auto" style={{ '--h': px(H * s) }} />
+              {active && <Knob onDown={(e) => { const h0 = H * s; start(e, (_dx, dy) => put(i, { scale: r2(clamp((s * (h0 + dy)) / h0, 0.3, 1.6)) })); }} />}
+            </span>
+            <Cap text={im.caption} size={fs * 0.72} />
           </span>
         );
       })}
@@ -339,7 +343,7 @@ export function FreeFace({ b, h, fs, active, onPatch }: { b: Doc; h: number; fs:
     const z = it.kind === 'image' && (it.z ?? 1) < top ? top + 1 : it.z;
     start(e, (dx, dy) => items.map((x, k) => (k !== i ? x : mode === 'move'
       ? { ...x, x: r2(clamp(it.x + dx / W, 0, 0.98)), y: r2(clamp(it.y + dy / h, 0, 0.98)), ...(x.kind === 'image' ? { z } : {}) }
-      : { ...x, w: r2(clamp(it.w + dx / W, 0.08, 1)), z })));
+      : { ...x, w: r2(clamp((it.w ?? 0.3) + dx / W, 0.08, 1)), ...(x.kind === 'image' ? { z } : {}) })));
   };
   return (
     <div className={cn('relative h-(--h) w-(--w)', active && 'bg-foreground/[.03]')} style={{ '--h': px(h), '--w': px(W) }}>
@@ -351,9 +355,12 @@ export function FreeFace({ b, h, fs, active, onPatch }: { b: Doc; h: number; fs:
           {active && <Knob onDown={(e) => drag(e, i, 'size')} />}
         </span>
       ) : (
-        <p key={i} className={cn('serif absolute top-[calc(var(--y)*100%)] left-[calc(var(--x)*100%)] z-999 text-(length:--fs) leading-[1.9] tracking-[.26em] text-soft-foreground [writing-mode:vertical-rl]', active && 'cursor-move outline outline-1 outline-dashed outline-offset-2 outline-foreground/30')}
-          style={{ '--x': it.x, '--y': it.y, '--fs': px(fs * 0.85) }}
-          onPointerDown={active ? (e) => drag(e, i, 'move') : undefined}><Spans text={it.text} /></p>
+        <p key={i} className={cn('serif absolute top-[calc(var(--y)*100%)] left-[calc(var(--x)*100%)] z-999 text-(length:--fs) text-soft-foreground', it.writing === 'h' ? 'w-[calc(var(--tw)*100%)] leading-[1.8] tracking-[.04em]' : 'leading-[1.9] tracking-[.26em] [writing-mode:vertical-rl]', active && 'cursor-move outline outline-1 outline-dashed outline-offset-2 outline-foreground/30')}
+          style={{ '--x': it.x, '--y': it.y, '--tw': it.w ?? 0.3, '--fs': px(fs * 0.85) }}
+          onPointerDown={active ? (e) => drag(e, i, 'move') : undefined}>
+          {it.text?.length ? <Spans text={it.text} /> : active && <span className="text-muted-foreground/60">文本框</span>}
+          {active && it.writing === 'h' && <Knob onDown={(e) => drag(e, i, 'size')} />}
+        </p>
       ))}
     </div>
   );
@@ -434,7 +441,7 @@ export function TextFace({ b, v, fs, size, align, editing }: { b: Doc; v: boolea
 
 function Face({ b, g, scale, places, here, active, editing, onPatch }: { b: Doc; g: Geo; scale: number; places: PlaceInfo[]; here?: number; active: boolean; editing: boolean; onPatch: (p: Doc) => void }) {
   const H = g.ph * scale, fs = g.fs;
-  const cap = (text: string) => text && <p className="mt-2 max-w-full truncate text-(length:--fs) text-muted-foreground" style={{ '--fs': px(fs * 0.72) }}>{text}</p>;
+  const cap = (text?: string) => <Cap text={text} size={fs * 0.72} />;
   switch (b.type) {
     case 'text': case 'head': {
       const v = b.writing === 'v';
@@ -443,20 +450,19 @@ function Face({ b, g, scale, places, here, active, editing, onPatch }: { b: Doc;
     case 'image':
       return <figure className="max-w-(--mw)" style={{ '--mw': px(g.S * 2.2), '--h': px(H) }}><Img src={b.src} className="h-(--h) w-auto" />{cap(b.caption)}</figure>;
     case 'pair':
-      return <figure><div className="flex gap-(--gap)" style={{ '--gap': px(fs * 0.8), '--h': px(H) }}>{b.images.map((im: Doc, i: number) => <Img key={i} src={im.src} className="h-(--h) w-auto" />)}</div>{cap(caption(b.images))}</figure>;
+      return <figure><div className="flex gap-(--gap)" style={{ '--gap': px(fs * 0.8), '--h': px(H) }}>{b.images.map((im: Doc, i: number) => <figure key={i}><Img src={im.src} className="h-(--h) w-auto" />{cap(im.caption)}</figure>)}</div></figure>;
     case 'grid': {
       const cell = H / 2 - 5, n = b.images.length;
       return (
         <figure>
           <div className="grid auto-cols-(--col) grid-flow-col grid-rows-[repeat(2,var(--cell))] gap-2.5" style={{ '--cell': px(cell), '--col': px((cell * 4) / 3) }}>
-            {b.images.map((im: Doc, i: number) => <Img key={i} src={im.src} className={cn('h-full w-full', i === 0 ? 'row-[span_2] col-[span_2]' : i === n - 1 && n > 1 && 'row-[span_2]')} />)}
+            {b.images.map((im: Doc, i: number) => <figure key={i} className={cn('flex min-w-0 flex-col', i === 0 ? 'row-[span_2] col-[span_2]' : i === n - 1 && n > 1 && 'row-[span_2]')}><Img src={im.src} className="min-h-0 w-full flex-1" />{cap(im.caption)}</figure>)}
           </div>
-          {cap(caption(b.images))}
         </figure>
       );
     }
     case 'strip':
-      return <><StripFace b={b} H={H} fs={fs} rtl={g.rtl} active={active} onPatch={onPatch} />{cap(caption(b.images))}</>;
+      return <StripFace b={b} H={H} fs={fs} rtl={g.rtl} active={active} onPatch={onPatch} />;
     case 'free':
       return <FreeFace b={b} h={g.ph * 1.04 * scale} fs={fs} active={active} onPatch={onPatch} />;
     case 'map':
