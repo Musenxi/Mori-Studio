@@ -92,6 +92,8 @@ function List() {
                     ? <a href={m.url} target="_blank" rel="noopener noreferrer nofollow" title={m.url} className="font-medium text-foreground underline decoration-foreground/25 underline-offset-2 transition-colors hover:decoration-foreground">{m.name}</a>
                     : <b className="font-medium text-foreground">{m.name}</b>}
                   <span className="mono text-11-5">{when(m.createdAt)}</span>
+                  {m.email && <a href={`mailto:${m.email}`} className="mono text-11-5 transition-colors hover:text-foreground">{m.email}</a>}
+                  {m.ip && <span className="mono text-11-5">{m.ip}</span>}
                   <span className="text-12-5">{title(m.entry)}</span>
                   {m.parentId && <span className="mono rounded-full bg-foreground/[.06] px-2 py-px text-11">回复 #{m.parentId}</span>}
                 </div>
