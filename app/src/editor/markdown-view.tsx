@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Bold, Code, Heading2, Heading3, ImageIcon, Italic, Link2, List, MapPin, MessageSquareQuote, Quote } from 'lucide-react';
+import { Bold, Code, Heading2, Heading3, ImageIcon, Italic, Link2, List, MapPin, Asterisk, MessageSquareQuote, Quote } from 'lucide-react';
 import { parsePlaceHref, placeHref, placesOf } from 'astro-mori/flow';
 import { api } from '@/lib/api';
 import { countWords, wan } from '@/lib/format';
@@ -11,7 +11,7 @@ import { Tip } from '@/components/tip';
 import { createEditor, type MdCommand, type MdEditor, type PlaceTarget } from './cm';
 import { PlaceDialog, type PlaceForm } from './place-fields';
 
-const TOOLS: Array<{ cmd: MdCommand | 'image' | 'note' | 'place'; label: string; icon: typeof Bold; key?: string; gap?: boolean }> = [
+const TOOLS: Array<{ cmd: MdCommand | 'image' | 'note' | 'fn' | 'place'; label: string; icon: typeof Bold; key?: string; gap?: boolean }> = [
   { cmd: 'bold', label: '粗体', icon: Bold, key: '⌘B' },
   { cmd: 'italic', label: '斜体', icon: Italic, key: '⌘I' },
   { cmd: 'link', label: '链接', icon: Link2, key: '⌘K' },
@@ -22,6 +22,7 @@ const TOOLS: Array<{ cmd: MdCommand | 'image' | 'note' | 'place'; label: string;
   { cmd: 'list', label: '列表', icon: List },
   { cmd: 'image', label: '插入图片', icon: ImageIcon, gap: true },
   { cmd: 'note', label: '旁注', icon: MessageSquareQuote },
+  { cmd: 'fn', label: '脚注', icon: Asterisk },
   { cmd: 'place', label: '地点', icon: MapPin },
 ];
 
@@ -73,7 +74,7 @@ export function MarkdownView({ doc, setDoc }: { doc: Doc; setDoc: (fn: (d: Doc) 
   };
   const run = (cmd: (typeof TOOLS)[number]['cmd']) => {
     if (cmd === 'image') setLib(true);
-    else if (cmd === 'note') ed.current?.addNote();
+    else if (cmd === 'note' || cmd === 'fn') ed.current?.addNote(cmd);
     else if (cmd === 'place') openPin();
     else ed.current?.run(cmd);
   };

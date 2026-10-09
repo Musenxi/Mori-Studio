@@ -71,6 +71,15 @@ test('旁注：没改的原样保留（裸字符串不变成数组），改过�
   assert.match(JSON.stringify(edited.notes.n1), /改过的旁注/);
 });
 
+test('新加的 [^n1] 是旁注、[^f1] 是脚注；旧文档里已有的 id 保持原来的类型', () => {
+  const d = { title: 'T', blocks: [{ id: 'b01', type: 'p', text: '甲' }] };
+  const md = toMarkdown(d).replace('甲', '甲[^n1]乙[^f1]丙[^n2]') + '\n\n[^n1]: 旁\n[^f1]: 底\n[^n2]: 老底';
+  const types = (x) => x.blocks[0].text.flatMap((s) => (s.marks ?? []).map((m) => `${m.type}:${m.ref}`));
+  assert.deepEqual(types(fromMarkdown(md, d)), ['note:n1', 'fn:f1', 'note:n2']);
+  const old = { ...d, blocks: [{ id: 'b01', type: 'p', text: [{ t: '甲', marks: [{ type: 'fn', ref: 'n2' }] }] }], notes: { n2: { text: '老底' } } };
+  assert.deepEqual(types(fromMarkdown(md, old)), ['note:n1', 'fn:f1', 'fn:n2']);
+});
+
 /* ───────────── 长卷：Markdown 里只有标题、文字、地点和图 ───────────── */
 const place = (extra = {}) => ({ type: 'place', lnglat: [-21.9426, 64.1466], ...extra });
 const trip = () => ({

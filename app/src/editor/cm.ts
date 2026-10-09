@@ -95,7 +95,7 @@ export interface MdEditor {
   destroy: () => void;
   run: (cmd: MdCommand) => void;
   insertBlock: (text: string) => void;
-  addNote: () => void;
+  addNote: (kind?: 'note' | 'fn') => void;
   placeTarget: () => PlaceTarget;
   /** 把一段范围换成新文字，光标放在它后面 */
   replaceRange: (from: number, to: number, insert: string) => void;
@@ -176,12 +176,12 @@ export function createEditor({ parent, doc, placeholder, cursor = 'start', onCha
       view.dispatch({ changes: { from, to, insert }, selection: { anchor: from + insert.length } });
       view.focus();
     },
-    /** 加一条旁注：光标处放引用，文末追加定义，光标跳到定义处等着输入 */
-    addNote() {
-      const text = view.state.doc.toString();
+    /** 加一条旁注（id 是 n1…）或脚注（id 是 f1…）：光标处放引用，文末追加定义，光标跳到定义处等着输入 */
+    addNote(kind = 'note') {
+      const text = view.state.doc.toString(), p = kind === 'fn' ? 'f' : 'n';
       let max = 0;
-      for (const m of text.matchAll(/\[\^n(\d+)\]/g)) max = Math.max(max, +m[1]);
-      const id = `n${max + 1}`, at = view.state.selection.main.head, def = `\n\n[^${id}]: `;
+      for (const m of text.matchAll(new RegExp(`\\[\\^${p}(\\d+)\\]`, 'g'))) max = Math.max(max, +m[1]);
+      const id = `${p}${max + 1}`, at = view.state.selection.main.head, def = `\n\n[^${id}]: `;
       const end = view.state.doc.length + `[^${id}]`.length;
       view.dispatch({ changes: [{ from: at, insert: `[^${id}]` }, { from: view.state.doc.length, insert: def }], selection: { anchor: end + def.length } });
       view.focus();

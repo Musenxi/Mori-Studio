@@ -37,16 +37,17 @@ export function similarity(a, b) {
   return (2 * hit) / (a.length - 1 + b.length - 1);
 }
 
-/** 旁注和脚注在 Markdown 里都写成 [^id]；按旧文档里这个 id 是旁注还是脚注，还原类型 */
+/** 旁注和脚注在 Markdown 里都写成 [^id]；这个 id 在旧文档里是哪种就还原成哪种，新的按 id 认：n1、n2… 是旁注，其余是脚注 */
 function restoreNoteKinds(blocks, oldBlocks) {
   const kinds = new Map();
-  const scan = (v) => { if (Array.isArray(v)) v.forEach(scan); else if (v && typeof v === 'object') { if (v.type === 'note' && v.ref) kinds.set(v.ref, 'note'); Object.values(v).forEach(scan); } };
+  const scan = (v) => { if (Array.isArray(v)) v.forEach(scan); else if (v && typeof v === 'object') { if ((v.type === 'note' || v.type === 'fn') && v.ref && !kinds.has(v.ref)) kinds.set(v.ref, v.type); Object.values(v).forEach(scan); } };
   scan(oldBlocks);
+  const kindOf = (ref) => kinds.get(ref) ?? (/^n\d+$/.test(ref) ? 'note' : 'fn');
   const fix = (v) => {
     if (Array.isArray(v)) return v.map(fix);
     if (v && typeof v === 'object') {
       const o = Object.fromEntries(Object.entries(v).map(([k, x]) => [k, fix(x)]));
-      return o.type === 'fn' && kinds.get(o.ref) === 'note' ? { ...o, type: 'note' } : o;
+      return o.type === 'fn' && o.ref ? { ...o, type: kindOf(o.ref) } : o;
     }
     return v;
   };
