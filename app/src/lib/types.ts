@@ -45,6 +45,7 @@ export interface Project {
     actions: Action[] | null;
     actionsLayout: 'merged' | 'split';
     head: string;
+    author: { name?: string; email?: string; url?: string };
   };
   entries: EntrySummary[];
   pages: PageSummary[];

@@ -134,3 +134,22 @@ test('head：多行代码写成模板字符串，引号、反引号、${、反�
   assert.doesNotMatch(readFileSync(f, 'utf8'), /head:/);
   assert.equal((await read()).home.editorNote, '这一期"没有"主题。');
 });
+
+test('作者：没有 author 块就新建；改、加、清空一项；全清空连块一起删', async () => {
+  const f = make();
+  const read = async () => (await import(`data:text/javascript,${encodeURIComponent(readFileSync(f, 'utf8').replace(/^import.*\n/, '').replace('defineMoriConfig(', '('))}`)).default;
+  setConfigValue(f, 'author.name', '橘夜庭');
+  setConfigValue(f, 'author.email', 'me@example.com');
+  setConfigValue(f, 'author.url', "https://it's.example.com");
+  assert.deepEqual((await read()).author, { name: '橘夜庭', email: 'me@example.com', url: "https://it's.example.com" });
+  setConfigValue(f, 'author.name', '夜庭');
+  setConfigValue(f, 'author.email', '');
+  assert.deepEqual((await read()).author, { name: '夜庭', url: "https://it's.example.com" });
+  setConfigValue(f, 'author.name', '');
+  setConfigValue(f, 'author.url', '');
+  const s = readFileSync(f, 'utf8');
+  assert.doesNotMatch(s, /author/);
+  assert.equal((await read()).title, 'MORI');
+  setConfigValue(f, 'author.url', ''); // 没有块时清空：什么都不做
+  assert.equal(readFileSync(f, 'utf8'), s);
+});

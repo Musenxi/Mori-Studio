@@ -199,7 +199,7 @@ export async function startStudio({ root, port = 4400, dev = false }) {
         const cn = await commentNumbers(); // 侧栏上的未读数量；评论服务连不上就当 0
         const pending = cn?.unread ?? 0;
         return send(res, 200, {
-          root, configPath, config: { title: config.title ?? 'MORI', description: config.description ?? '', accent: config.accent ?? '#002fa7', accentDark: config.accentDark, categories: config.categories ?? [], home: config.home, archive: config.archive, feed: config.feed, comments: config.comments?.provider === 'mori' ? { avatar: config.comments.avatar, status: config.comments.status ?? 'on' } : undefined, nav: config.nav ?? null, actions: config.actions ?? null, actionsLayout: config.actionsLayout === 'split' ? 'split' : 'merged', lang: config.lang ?? 'zh-CN', head: typeof config.head === 'string' ? config.head : '' },
+          root, configPath, config: { title: config.title ?? 'MORI', description: config.description ?? '', accent: config.accent ?? '#002fa7', accentDark: config.accentDark, categories: config.categories ?? [], home: config.home, archive: config.archive, feed: config.feed, comments: config.comments?.provider === 'mori' ? { avatar: config.comments.avatar, status: config.comments.status ?? 'on' } : undefined, nav: config.nav ?? null, actions: config.actions ?? null, actionsLayout: config.actionsLayout === 'split' ? 'split' : 'merged', lang: config.lang ?? 'zh-CN', head: typeof config.head === 'string' ? config.head : '', author: config.author ?? {} },
           entries: listEntries(root), pages: listPages(root), assets: listAssets(root), dev, preview: { port: preview.port, url: await previewUrl(preview.port) }, publish: config.publish ?? null, comments: { provider: config.comments?.provider ?? null, avatar: avatarTemplate(config.comments?.avatar), endpoint: commentsEndpoint(), hasToken: !!adminToken(), pending },
         });
       }
@@ -288,6 +288,13 @@ export async function startStudio({ root, port = 4400, dev = false }) {
       if ((mm = m(/^\/api\/comments(?:\/(stats|token|seen|(\d+)))?$/))) {
         try {
           if (!mm[1] && req.method === 'GET') return send(res, 200, await admin('GET', `/comments?limit=300${url.searchParams.get('status') ? `&status=${url.searchParams.get('status')}` : ''}`));
+          // 以博主身份发评论 / 回复：名字、邮箱、网址取 mori.config.ts 的 author
+          if (!mm[1] && req.method === 'POST') {
+            const { entry, body, parentId } = await readJson(req);
+            const a = config.author ?? {};
+            if (!a.name) return send(res, 400, { error: '还没有填作者名字（设定 → 作者）' });
+            return send(res, 201, await admin('POST', '/comments', { entry, body, parentId, name: a.name, email: a.email, url: a.url }));
+          }
           if (mm[1] === 'stats' && req.method === 'GET') return send(res, 200, await admin('GET', '/stats'));
           if (mm[1] === 'seen' && req.method === 'POST') { writeState({ commentsSeenAt: Date.now() }); return send(res, 200, { ok: true }); }
           if (mm[1] === 'token' && req.method === 'PUT') {

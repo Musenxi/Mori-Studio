@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Check, EyeOff, RefreshCw, Trash2 } from 'lucide-react';
+import { Check, EyeOff, RefreshCw, Reply, Trash2 } from 'lucide-react';
+import { Link } from 'react-router';
 import { toast } from 'sonner';
 import { ApiError, api, type CommentRow } from '@/lib/api';
 import { cn } from '@/lib/cn';
@@ -9,6 +10,7 @@ import { useProject, useRefresh } from '@/lib/hooks';
 import { Button } from '@/components/ui/button';
 import { useConfirm } from '@/components/confirm';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { Body, Empty, PageHeader } from '@/components/page';
 import { Segmented } from '@/components/segmented';
 
@@ -64,6 +66,7 @@ function List() {
   const confirm = useConfirm();
   const qc = useQueryClient();
   const [tab, setTab] = useState<Tab>('pending');
+  const [replying, setReplying] = useState<number | null>(null);
   const list = useQuery({ queryKey: ['comments', tab], queryFn: () => api.comments(tab), staleTime: 0 });
   const stats = useQuery({ queryKey: ['comment-stats'], queryFn: api.commentStats, staleTime: 0 });
   const title = (entry: string) => project?.entries.find((e) => e.id === entry.split('/')[1])?.title ?? project?.pages.find((p) => p.id === entry.split('/')[1])?.title ?? entry;
@@ -95,15 +98,18 @@ function List() {
                   {m.email && <a href={`mailto:${m.email}`} className="mono text-11-5 transition-colors hover:text-foreground">{m.email}</a>}
                   {m.ip && <span className="mono text-11-5">{m.ip}</span>}
                   <span className="text-12-5">{title(m.entry)}</span>
+                  {m.author && <span className="rounded-full bg-primary/10 px-2 py-px text-11 text-primary">博主</span>}
                   {m.parentId && <span className="mono rounded-full bg-foreground/[.06] px-2 py-px text-11">回复 #{m.parentId}</span>}
                 </div>
                 {m.quote && <blockquote className="my-2.5 rounded-lg bg-foreground/[.05] px-3.5 py-2 text-13 text-soft-foreground">{m.quote}</blockquote>}
                 <p className="my-1.5 whitespace-pre-wrap break-words">{m.body}</p>
                 <div className="-ml-2.5 mt-2 flex gap-1">
+                  {m.status !== 'hidden' && <Button variant="ghost" size="sm" onClick={() => setReplying(replying === m.id ? null : m.id)}><Reply size={14} />回复</Button>}
                   {m.status !== 'approved' && <Button variant="ghost" size="sm" onClick={() => act(() => api.setCommentStatus(m.id, 'approved'))}><Check size={14} />通过</Button>}
                   {m.status !== 'hidden' && <Button variant="ghost" size="sm" onClick={() => act(() => api.setCommentStatus(m.id, 'hidden'))}><EyeOff size={14} />隐藏</Button>}
                   <Button variant="ghost-danger" size="sm" onClick={async () => { if (await confirm({ title: '永久删除这条评论？', description: '它下面的回复也会一起删除，不能恢复。', confirmLabel: '删除', danger: true })) void act(() => api.removeComment(m.id)); }}><Trash2 size={14} />删除</Button>
                 </div>
+                {replying === m.id && <ReplyBox to={m} onDone={async () => { setReplying(null); await reload(); }} onCancel={() => setReplying(null)} />}
               </div>
             </article>
           ))}
@@ -111,6 +117,29 @@ function List() {
         {!list.isPending && rows.length === 0 && <Empty>这里没有评论。</Empty>}
       </Body>
     </>
+  );
+}
+
+/** 以博主身份回复（名字、邮箱、网址取设定里的作者）。回复待审的评论时，那条一起通过；回复的是回复，发出去时在前面带上 @名字（和站点上一样，不放进输入框） */
+function ReplyBox({ to, onDone, onCancel }: { to: CommentRow; onDone: () => Promise<void>; onCancel: () => void }) {
+  const { data: project } = useProject();
+  const [text, setText] = useState('');
+  const [busy, setBusy] = useState(false);
+  const author = project?.config.author.name;
+  if (!author) return <p className="mt-3 text-soft-foreground">还没有填作者名字：<Link to="/settings" className="text-foreground underline underline-offset-2">设定 → 作者</Link></p>;
+  const send = async () => {
+    setBusy(true);
+    try { await api.postComment(to.entry, (to.parentId ? `@${to.name} ` : '') + text.trim(), to.id); toast.success('已发表'); await onDone(); } catch (e) { toast.error((e as Error).message); }
+    setBusy(false);
+  };
+  return (
+    <form className="mt-3" onSubmit={(e) => { e.preventDefault(); if (text.trim()) void send(); }}>
+      <Textarea autoFocus rows={3} value={text} onChange={(e) => setText(e.target.value)} placeholder={`以 ${author} 回复 ${to.name}`} />
+      <div className="mt-2 flex justify-end gap-2">
+        <Button type="button" variant="ghost" size="sm" onClick={onCancel}>取消</Button>
+        <Button type="submit" size="sm" disabled={busy || !text.trim()}>发表</Button>
+      </div>
+    </form>
   );
 }
 

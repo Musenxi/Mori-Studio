@@ -67,6 +67,12 @@ export default function Settings() {
           <Field label="简介"><Input value={description} onChange={(e) => setDescription(e.target.value)} /></Field>
         </Card></Section>
 
+        <Section title="作者"><Card>
+          <Field label="名字"><Input value={edits['author.name'] ?? cfg.author.name ?? ''} onChange={(e) => put('author.name', e.target.value)} /></Field>
+          <Field label="邮箱"><Input type="email" value={edits['author.email'] ?? cfg.author.email ?? ''} onChange={(e) => put('author.email', e.target.value)} /></Field>
+          <Field label="网址"><Input value={edits['author.url'] ?? cfg.author.url ?? ''} onChange={(e) => put('author.url', e.target.value)} /></Field>
+        </Card></Section>
+
         <Section title="首页与归档"><Card>
           <Field label="版式">
             <Segmented value={edits['home.style'] ?? cfg.home?.style ?? 'quote'} onValueChange={(v) => put('home.style', v)} options={[{ value: 'quote', label: '引文版' }, { value: 'cover', label: '封面版' }, { value: 'list', label: '列表' }]} />
