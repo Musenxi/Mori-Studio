@@ -67,8 +67,9 @@ export default function Settings() {
       if (accentDarkNow !== (cfg.accentDark ?? '')) await api.setConfig('accentDark', accentDarkNow || null);
       for (const [k, v] of Object.entries(edits)) await api.setConfig(k, v);
       if (head.trim() !== (cfg.head ?? '')) await api.setConfig('head', head.trim() || null);
-      if (mail && mailDirty) {
-        const r = await api.setCommentMail(mail);
+      // 邮件里的链接用站点主题色：邮件设置改了、或者主题色改了，都把当前的主题色一起存过去
+      if (mail && (mailDirty || mail.accent !== accent)) {
+        const r = await api.setCommentMail({ ...mail, accent });
         qc.setQueryData(['comment-mail'], r);
         setMail(r.mail);
       }

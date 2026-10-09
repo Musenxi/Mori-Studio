@@ -25,7 +25,7 @@ export interface GitInfo { isRepo: boolean; top?: string; nested?: boolean; bran
 /** 邮件提醒（存在评论服务里）。密码、Key 读回来是空的，has* 表示填过；保存时留空表示不改 */
 export interface MailSettings {
   provider: 'off' | 'smtp' | 'resend' | 'cloudflare';
-  fromName: string; fromEmail: string; to: string; site: string;
+  fromName: string; fromEmail: string; to: string; site: string; accent: string;
   notifyAuthor: boolean; notifyReply: boolean;
   smtp: { host: string; port: number; user: string; pass: string; hasPass?: boolean };
   resend: { apiKey: string; hasKey?: boolean };
