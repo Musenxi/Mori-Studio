@@ -69,7 +69,8 @@ function List() {
   const [replying, setReplying] = useState<number | null>(null);
   const list = useQuery({ queryKey: ['comments', tab], queryFn: () => api.comments(tab), staleTime: 0 });
   const stats = useQuery({ queryKey: ['comment-stats'], queryFn: api.commentStats, staleTime: 0 });
-  const title = (entry: string) => project?.entries.find((e) => e.id === entry.split('/')[1])?.title ?? project?.pages.find((p) => p.id === entry.split('/')[1])?.title ?? entry;
+  // 评论记的是 posts/<id> 或 pages/<id>，和 Studio 编辑器的路由一样；文章已经删了就只显示文字
+  const title = (entry: string) => { const [kind, id] = entry.split('/'); return (kind === 'pages' ? project?.pages : project?.entries)?.find((e) => e.id === id)?.title; };
 
   // 打开这一页就算“看过了”：未读数清零
   useEffect(() => { if (list.isSuccess) void api.markCommentsSeen().then(refresh).catch(() => {}); }, [list.isSuccess]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -97,7 +98,9 @@ function List() {
                   <span className="mono text-11-5">{when(m.createdAt)}</span>
                   {m.email && <a href={`mailto:${m.email}`} className="mono text-11-5 transition-colors hover:text-foreground">{m.email}</a>}
                   {m.ip && <span className="mono text-11-5">{m.ip}</span>}
-                  <span className="text-12-5">{title(m.entry)}</span>
+                  {title(m.entry)
+                    ? <Link to={`/${m.entry}`} className="text-12-5 underline decoration-foreground/25 underline-offset-2 transition-colors hover:text-foreground hover:decoration-foreground">{title(m.entry)}</Link>
+                    : <span className="text-12-5">{m.entry}</span>}
                   {m.author && <span className="rounded-full bg-primary/10 px-2 py-px text-11 text-primary">博主</span>}
                   {m.parentId && <span className="mono rounded-full bg-foreground/[.06] px-2 py-px text-11">回复 #{m.parentId}</span>}
                 </div>
