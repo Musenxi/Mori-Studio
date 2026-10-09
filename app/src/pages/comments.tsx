@@ -100,7 +100,7 @@ function List() {
                   {m.email && <a href={`mailto:${m.email}`} className="mono text-11-5 transition-colors hover:text-foreground">{m.email}</a>}
                   {m.ip && <span className="mono text-11-5">{m.ip}</span>}
                   {title(m.entry)
-                    ? <Link to={`/${m.entry}`} className="text-12-5 underline decoration-foreground/25 underline-offset-2 transition-colors hover:text-foreground hover:decoration-foreground">{title(m.entry)}</Link>
+                    ? <Link to={`/${m.entry}`} className="text-12-5 text-brand transition-opacity hover:opacity-75">{title(m.entry)}</Link>
                     : <span className="text-12-5">{m.entry}</span>}
                   {m.author && <span className="rounded-full bg-primary/10 px-2 py-px text-11 text-primary">博主</span>}
                   {m.parentId && <span className="mono rounded-full bg-foreground/[.06] px-2 py-px text-11">回复 #{m.parentId}</span>}

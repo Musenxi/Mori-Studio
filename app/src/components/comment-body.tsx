@@ -17,7 +17,7 @@ function render(nodes: Node[]): ReactNode[] {
       case 'br': return <br key={i} />;
       case 'code': return <code key={i} className="mono rounded-sm bg-foreground/[.06] px-1">{n.text}</code>;
       case 'pre': return <pre key={i} className="mono overflow-x-auto rounded-lg bg-foreground/[.05] px-3.5 py-2.5"><code className="whitespace-pre">{n.text}</code></pre>;
-      case 'a': return <a key={i} href={n.href} target="_blank" rel="noopener noreferrer nofollow" className="underline decoration-foreground/25 underline-offset-2 transition-colors hover:decoration-foreground">{kids(n)}</a>;
+      case 'a': return <a key={i} href={n.href} target="_blank" rel="noopener noreferrer nofollow" className="text-brand transition-opacity hover:opacity-75">{kids(n)}</a>;
       case 'ul': return <ul key={i} className="list-disc pl-5">{items(n)}</ul>;
       case 'ol': return <ol key={i} start={n.start} className="list-decimal pl-5">{items(n)}</ol>;
       case 'quote': return <blockquote key={i} className="space-y-2 border-l-2 border-border pl-3 text-soft-foreground">{kids(n)}</blockquote>;

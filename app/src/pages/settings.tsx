@@ -155,7 +155,7 @@ export default function Settings() {
               <button key={c} type="button" title={n} aria-label={n} onClick={() => setAccent(c)} style={{ '--c': c }} className={cn('h-7 w-7 rounded-full bg-(--c) outline-offset-2 transition-[outline-color,transform] hover:scale-110', accent === c ? 'outline outline-2 outline-foreground' : 'outline outline-1 outline-transparent hover:outline-muted-foreground')} />
             ))}
             <input type="color" value={accent} aria-label="自选颜色" onChange={(e) => setAccent(e.target.value)} className="ml-1 h-8 w-10 cursor-pointer rounded-md border-0 bg-transparent p-0" />
-            <span className="mono text-muted-foreground">{accent}</span>
+            <HexInput value={accent} onChange={setAccent} label="主题色" />
           </div>
           <div className="grid grid-cols-2 gap-3 max-sm:grid-cols-1">
             <Swatch bg={light(accent)} paper="#f3f0e8" ink="#1d1b18" label="亮色" />
@@ -164,6 +164,7 @@ export default function Settings() {
           <div className="mt-4 flex items-center gap-3">
             <SwitchField checked={override} label="手动指定暗色版本" onCheckedChange={(v) => { setOverride(v); if (v && !accentDark) setAccentDark('#7f9bff'); }} />
             {override && <input type="color" value={accentDark || '#7f9bff'} aria-label="暗色版本" onChange={(e) => setAccentDark(e.target.value)} className="h-8 w-10 cursor-pointer rounded-md border-0 bg-transparent p-0" />}
+            {override && <HexInput value={accentDark || '#7f9bff'} onChange={setAccentDark} label="暗色版本" />}
           </div>
         </Card></Section>
       </Body>
@@ -176,6 +177,26 @@ function Swatch({ bg, paper, ink, label }: { bg: string; paper: string; ink: str
     <div style={{ '--paper': paper, '--ink': ink, '--bg': bg }} className="rounded-xl bg-(--paper) p-4 text-(--ink) shadow-soft">
       <div className="h-8 w-full rounded-lg bg-(--bg)" />
       <div className="mt-2 text-12-5">{label}</div>
+    </div>
+  );
+}
+
+const parseHex = (v: string) => {
+  const m = v.trim().toLowerCase().match(/^#?([0-9a-f]{3}|[0-9a-f]{6})$/);
+  return m ? `#${m[1].length === 3 ? [...m[1]].map((c) => c + c).join('') : m[1]}` : null;
+};
+
+/** 16 进制色值：#rrggbb 或 #rgb（# 可省），写对了才改颜色；离开时没写对就恢复原值 */
+function HexInput({ value, onChange, label }: { value: string; onChange: (v: string) => void; label: string }) {
+  const [text, setText] = useState(value);
+  // 颜色从别处改了（取色器、预设）才同步过来；自己正在输入的不打断
+  useEffect(() => { if (parseHex(text) !== value) setText(value); }, [value]); // eslint-disable-line react-hooks/exhaustive-deps
+  const parse = parseHex;
+  return (
+    <div className="mono w-28">
+      <Input aria-label={label} spellCheck={false} value={text}
+        onChange={(e) => { setText(e.target.value); const v = parse(e.target.value); if (v) onChange(v); }}
+        onBlur={() => setText(parse(text) ?? value)} />
     </div>
   );
 }
