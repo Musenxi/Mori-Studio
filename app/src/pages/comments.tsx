@@ -134,10 +134,12 @@ function ReplyBox({ to, onDone, onCancel }: { to: CommentRow; onDone: () => Prom
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
   const author = project?.config.author.name;
+  const [kind, id] = to.entry.split('/');
+  const title = (kind === 'pages' ? project?.pages : project?.entries)?.find((e) => e.id === id)?.title;
   if (!author) return <p className="mt-3 text-soft-foreground">还没有填作者名字：<Link to="/settings" className="text-foreground underline underline-offset-2">设定 → 作者</Link></p>;
   const send = async () => {
     setBusy(true);
-    try { await api.postComment(to.entry, (to.parentId ? `@${to.name} ` : '') + text.trim(), to.id); toast.success('已发表'); await onDone(); } catch (e) { toast.error((e as Error).message); }
+    try { await api.postComment(to.entry, (to.parentId ? `@${to.name} ` : '') + text.trim(), to.id, title); toast.success('已发表'); await onDone(); } catch (e) { toast.error((e as Error).message); }
     setBusy(false);
   };
   return (

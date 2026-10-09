@@ -22,6 +22,16 @@ export interface SaveResult {
 export interface AssetInfo { name: string; size: number; mtime: number; width?: number; height?: number; usedBy: Array<{ kind: 'post' | 'page' | 'friends'; id: string; title: string }> }
 export interface GitInfo { isRepo: boolean; top?: string; nested?: boolean; branch?: string; remotes?: Array<{ name: string; url: string }>; changed?: number; last?: string }
 /** 防垃圾规则（存在评论服务里）：屏蔽词、IP 段、网址、昵称 */
+/** 邮件提醒（存在评论服务里）。密码、Key 读回来是空的，has* 表示填过；保存时留空表示不改 */
+export interface MailSettings {
+  provider: 'off' | 'smtp' | 'resend' | 'cloudflare';
+  fromName: string; fromEmail: string; to: string; site: string;
+  notifyAuthor: boolean; notifyReply: boolean;
+  smtp: { host: string; port: number; user: string; pass: string; hasPass?: boolean };
+  resend: { apiKey: string; hasKey?: boolean };
+  cloudflare: { accountId: string; apiToken: string; hasToken?: boolean };
+}
+
 export interface SpamRules { words: string[]; ips: string[]; urls: string[]; names: string[] }
 
 export interface CommentRow { id: number; entry: string; name: string; avatar?: string | null; url?: string | null; email?: string | null; ip?: string | null; author?: boolean; body: string; createdAt: number; status: 'pending' | 'approved' | 'hidden' | 'spam'; block?: string | null; quote?: string | null; parentId?: number | null }
@@ -84,7 +94,10 @@ export const api = {
   commentStats: () => req<{ pending: number; approved: number; hidden: number; spam: number }>('GET', '/api/comments/stats'),
   commentSettings: () => req<{ spam: SpamRules }>('GET', '/api/comments/settings'),
   setCommentSettings: (spam: SpamRules) => req<{ spam: SpamRules }>('PUT', '/api/comments/settings', { spam }),
-  postComment: (entry: string, body: string, parentId?: number) => req('POST', '/api/comments', { entry, body, parentId }),
+  commentMail: () => req<{ mail: MailSettings }>('GET', '/api/comments/mail'),
+  setCommentMail: (mail: MailSettings) => req<{ mail: MailSettings }>('PUT', '/api/comments/mail', { mail }),
+  testCommentMail: () => req<{ ok: boolean }>('POST', '/api/comments/mail/test'),
+  postComment: (entry: string, body: string, parentId?: number, title?: string) => req('POST', '/api/comments', { entry, body, parentId, title }),
   setCommentStatus: (id: number, status: string) => req('PATCH', `/api/comments/${id}`, { status }),
   removeComment: (id: number) => req('DELETE', `/api/comments/${id}`),
   clearSpam: () => req<{ removed: number }>('DELETE', '/api/comments/spam'),

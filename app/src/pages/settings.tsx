@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { api, type SpamRules } from '@/lib/api';
+import { api, type MailSettings, type SpamRules } from '@/lib/api';
 import { useProject, useRefresh } from '@/lib/hooks';
 import { Field } from '@/components/field';
 import { Button } from '@/components/ui/button';
@@ -41,6 +41,10 @@ export default function Settings() {
   const spamQ = useQuery({ queryKey: ['comment-settings'], queryFn: api.commentSettings, enabled: !!spamOn, retry: false });
   const [spam, setSpam] = useState<Record<keyof SpamRules, string> | null>(null);
   useEffect(() => { if (spamQ.data) setSpam(spamText(spamQ.data.spam)); }, [spamQ.data]);
+  const mailQ = useQuery({ queryKey: ['comment-mail'], queryFn: api.commentMail, enabled: !!spamOn, retry: false });
+  const [mail, setMail] = useState<MailSettings | null>(null);
+  useEffect(() => { if (mailQ.data) setMail(mailQ.data.mail); }, [mailQ.data]);
+  const [testing, setTesting] = useState(false);
   useEffect(() => { if (cfg) { setTitle(cfg.title); setDescription(cfg.description ?? ''); setAccent(cfg.accent); setAccentDark(cfg.accentDark ?? ''); setOverride(!!cfg.accentDark); } }, [cfg?.title, cfg?.description, cfg?.accent, cfg?.accentDark]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (cfg) setHead(cfg.head ?? ''); }, [cfg?.head]); // eslint-disable-line react-hooks/exhaustive-deps
   if (!cfg) return null;
@@ -51,7 +55,8 @@ export default function Settings() {
   const autoN = Math.min(3600, Math.max(1, Math.round(Number(auto)) || 60));
   const accentDarkNow = override ? accentDark : '';
   const spamDirty = !!(spam && spamQ.data && SPAM.some(([k]) => spamLines(spam[k]).join('\n') !== spamQ.data.spam[k].join('\n')));
-  const dirty = spamDirty || (title && title !== cfg.title) || description !== (cfg.description ?? '') || accent !== cfg.accent || accentDarkNow !== (cfg.accentDark ?? '') || Object.keys(edits).length > 0 || autoN !== autosaveSeconds() || head.trim() !== (cfg.head ?? '');
+  const mailDirty = !!(mail && mailQ.data && JSON.stringify(mail) !== JSON.stringify(mailQ.data.mail));
+  const dirty = mailDirty || spamDirty || (title && title !== cfg.title) || description !== (cfg.description ?? '') || accent !== cfg.accent || accentDarkNow !== (cfg.accentDark ?? '') || Object.keys(edits).length > 0 || autoN !== autosaveSeconds() || head.trim() !== (cfg.head ?? '');
 
   const save = async () => {
     setBusy(true);
@@ -62,6 +67,11 @@ export default function Settings() {
       if (accentDarkNow !== (cfg.accentDark ?? '')) await api.setConfig('accentDark', accentDarkNow || null);
       for (const [k, v] of Object.entries(edits)) await api.setConfig(k, v);
       if (head.trim() !== (cfg.head ?? '')) await api.setConfig('head', head.trim() || null);
+      if (mail && mailDirty) {
+        const r = await api.setCommentMail(mail);
+        qc.setQueryData(['comment-mail'], r);
+        setMail(r.mail);
+      }
       if (spam && spamDirty) {
         const r = await api.setCommentSettings(Object.fromEntries(SPAM.map(([k]) => [k, spamLines(spam[k])])) as unknown as SpamRules);
         qc.setQueryData(['comment-settings'], r);
@@ -134,6 +144,22 @@ export default function Settings() {
           </Card></Section>
         )}
 
+        {spamOn && mail && (
+          <Section title="邮件提醒"><Card>
+            <MailFields mail={mail} set={setMail} defaults={{ to: cfg.author.email ?? '', site: cfg.site, fromName: cfg.title }} />
+            {mail.provider !== 'off' && (
+              <div className="pt-3">
+                <Button variant="secondary" size="sm" disabled={testing || mailDirty || !mailQ.data?.mail.to} onClick={async () => {
+                  setTesting(true);
+                  try { await api.testCommentMail(); toast.success(`已发到 ${mailQ.data!.mail.to}`); } catch (e) { toast.error((e as Error).message); }
+                  setTesting(false);
+                }}>发送测试邮件</Button>
+              </div>
+            )}
+          </Card></Section>
+        )}
+        {spamOn && mailQ.error && <p className="text-destructive">{(mailQ.error as Error).message}</p>}
+
         <Section title="自定义代码"><Card>
           <Field label="<head>" hint="只在构建出的站点里生效，预览里没有。">
             <Textarea variant="code" rows={6} spellCheck={false} value={head} onChange={(e) => setHead(e.target.value)} />
@@ -198,5 +224,48 @@ function HexInput({ value, onChange, label }: { value: string; onChange: (v: str
         onChange={(e) => { setText(e.target.value); const v = parse(e.target.value); if (v) onChange(v); }}
         onBlur={() => setText(parse(text) ?? value)} />
     </div>
+  );
+}
+
+/** 邮件提醒的各项。从“关闭”切到某种发信方式时，空着的收件邮箱、站点地址、发件人名字先用作者邮箱、站点配置补上 */
+function MailFields({ mail, set, defaults }: { mail: MailSettings; set: (m: MailSettings) => void; defaults: { to: string; site: string; fromName: string } }) {
+  const put = (patch: Partial<MailSettings>) => set({ ...mail, ...patch });
+  const secret = (has?: boolean) => (has ? '已填，留空不改' : undefined);
+  return (
+    <>
+      <Field label="发信方式">
+        <Segmented value={mail.provider} onValueChange={(v) => put({ provider: v, ...(mail.provider === 'off' && v !== 'off' ? { to: mail.to || defaults.to, site: mail.site || defaults.site, fromName: mail.fromName || defaults.fromName } : {}) })}
+          options={[{ value: 'off', label: '关闭' }, { value: 'smtp', label: 'SMTP' }, { value: 'resend', label: 'Resend' }, { value: 'cloudflare', label: 'Cloudflare' }]} />
+      </Field>
+      {mail.provider === 'smtp' && (
+        <>
+          <Field label="服务器"><Input value={mail.smtp.host} placeholder="smtp.qq.com" onChange={(e) => put({ smtp: { ...mail.smtp, host: e.target.value } })} /></Field>
+          <Field label="端口"><Input type="number" className="w-24" value={String(mail.smtp.port)} onChange={(e) => put({ smtp: { ...mail.smtp, port: Number(e.target.value) || 0 } })} /></Field>
+          <Field label="用户名"><Input value={mail.smtp.user} onChange={(e) => put({ smtp: { ...mail.smtp, user: e.target.value } })} /></Field>
+          <Field label="密码"><Input type="password" value={mail.smtp.pass} placeholder={secret(mail.smtp.hasPass)} onChange={(e) => put({ smtp: { ...mail.smtp, pass: e.target.value } })} /></Field>
+        </>
+      )}
+      {mail.provider === 'resend' && (
+        <Field label="API Key"><Input type="password" value={mail.resend.apiKey} placeholder={secret(mail.resend.hasKey)} onChange={(e) => put({ resend: { ...mail.resend, apiKey: e.target.value } })} /></Field>
+      )}
+      {mail.provider === 'cloudflare' && (
+        <>
+          <Field label="账号 ID" hint="Workers 版绑了 send_email 就不用填账号 ID 和令牌。"><Input value={mail.cloudflare.accountId} onChange={(e) => put({ cloudflare: { ...mail.cloudflare, accountId: e.target.value } })} /></Field>
+          <Field label="API 令牌"><Input type="password" value={mail.cloudflare.apiToken} placeholder={secret(mail.cloudflare.hasToken)} onChange={(e) => put({ cloudflare: { ...mail.cloudflare, apiToken: e.target.value } })} /></Field>
+        </>
+      )}
+      {mail.provider !== 'off' && (
+        <>
+          <Field label="发件人"><Input value={mail.fromName} onChange={(e) => put({ fromName: e.target.value })} /></Field>
+          <Field label="发件邮箱"><Input type="email" value={mail.fromEmail} onChange={(e) => put({ fromEmail: e.target.value })} /></Field>
+          <Field label="收件邮箱"><Input type="email" value={mail.to} onChange={(e) => put({ to: e.target.value })} /></Field>
+          <Field label="站点地址"><Input value={mail.site} placeholder="https://" onChange={(e) => put({ site: e.target.value })} /></Field>
+          <div className="flex flex-wrap gap-x-6 gap-y-2 pt-2">
+            <SwitchField checked={mail.notifyAuthor} label="新评论提醒我" onCheckedChange={(v) => put({ notifyAuthor: v })} />
+            <SwitchField checked={mail.notifyReply} label="有人回复时提醒读者" onCheckedChange={(v) => put({ notifyReply: v })} />
+          </div>
+        </>
+      )}
+    </>
   );
 }
