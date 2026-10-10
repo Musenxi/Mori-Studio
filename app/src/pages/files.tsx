@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router';
 import { Trash2, Upload } from 'lucide-react';
 import { toast } from 'sonner';
-import { api, assetUrl, type AssetInfo } from '@/lib/api';
+import { api, assetUrl, IMAGE_ACCEPT, isImageFile, type AssetInfo } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import { useRefresh } from '@/lib/hooks';
 import { Button } from '@/components/ui/button';
@@ -29,10 +29,9 @@ export default function Files() {
   const unused = all.filter((a) => a.usedBy.length === 0).length;
 
   const upload = async (files: File[]) => {
-    const imgs = files.filter((f) => f.type.startsWith('image/'));
-    if (!imgs.length) return toast.error('只能上传图片');
+    if (!files.some(isImageFile)) return toast.error('只能上传图片');
     setBusy(true);
-    try { for (const f of imgs) await api.upload(f); await Promise.all([refetch(), refresh()]); toast.success(`已上传 ${imgs.length} 张`); } catch (e) { toast.error((e as Error).message); }
+    try { const names = await api.uploadImages(files); await Promise.all([refetch(), refresh()]); toast.success(`已上传 ${names.length} 张`); } catch (e) { toast.error((e as Error).message); }
     setBusy(false);
   };
   const remove = async (a: AssetInfo) => {
@@ -44,7 +43,7 @@ export default function Files() {
   return (
     <div onDragOver={(e) => { e.preventDefault(); setOver(true); }} onDragLeave={(e) => { if (e.currentTarget === e.target) setOver(false); }} onDrop={(e) => { e.preventDefault(); setOver(false); void upload([...e.dataTransfer.files]); }} className="min-h-full">
       <PageHeader title="文件" sub={`${all.length} 张 · ${unused} 张没被引用`} actions={<>
-        <input ref={input} type="file" accept="image/*" multiple hidden onChange={(e) => { void upload([...(e.target.files ?? [])]); e.target.value = ''; }} />
+        <input ref={input} type="file" accept={IMAGE_ACCEPT} multiple hidden onChange={(e) => { void upload([...(e.target.files ?? [])]); e.target.value = ''; }} />
         <Button variant="default" onClick={() => input.current?.click()} disabled={busy}><Upload size={14} />{busy ? '上传中……' : '上传图片'}</Button>
       </>} />
       <Body wide className={cn('rounded-2xl transition-[background-color,box-shadow]', over && 'bg-foreground/[.03] ring-2 ring-foreground/20')}>
@@ -62,7 +61,7 @@ export default function Files() {
               </div>
               <figcaption className="px-1.5 pb-1 pt-2">
                 <div className="mono truncate text-11-5" title={a.name}>{a.name}</div>
-                <div className="mono text-10-5 text-muted-foreground">{a.width && a.height ? `${a.width}×${a.height} · ` : ''}{size(a.size)}</div>
+                <div className="mono text-10-5 text-muted-foreground">{a.width && a.height ? `${a.width}×${a.height} · ` : ''}{size(a.size)}{a.live && ' · 实况'}</div>
                 <div className="mt-0.5 text-12">
                   {a.usedBy.length === 0 ? <span className="text-muted-foreground">没被引用</span> : (
                     <span className="text-soft-foreground">被引用：{a.usedBy.slice(0, 2).map((r, i) => <span key={r.kind + r.id}>{i > 0 && '、'}<Link to={href(r)} className="text-foreground underline decoration-foreground/20 underline-offset-2 hover:decoration-foreground">{r.title}</Link></span>)}{a.usedBy.length > 2 && ` 等 ${a.usedBy.length} 处`}</span>

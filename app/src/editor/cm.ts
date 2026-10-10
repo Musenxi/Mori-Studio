@@ -7,6 +7,7 @@ import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirro
 import { markdown } from '@codemirror/lang-markdown';
 import { HighlightStyle, syntaxHighlighting } from '@codemirror/language';
 import { tags as t } from '@lezer/highlight';
+import { isImageFile } from '@/lib/api';
 
 const style = HighlightStyle.define([
   { tag: t.heading1, fontSize: '1.9em', letterSpacing: '.05em', lineHeight: '1.5' },
@@ -127,13 +128,13 @@ export function createEditor({ parent, doc, placeholder, cursor = 'start', onCha
         EditorView.updateListener.of((u) => { if (u.docChanged && !silent) onChange?.(u.state.doc.toString()); }),
         EditorView.domEventHandlers({
           paste(e, v) {
-            const files = [...(e.clipboardData?.files ?? [])].filter((f) => f.type.startsWith('image/'));
-            if (!files.length) return false;
+            const files = [...(e.clipboardData?.files ?? [])];
+            if (!files.some(isImageFile)) return false;
             e.preventDefault(); void insertImages(v, files); return true;
           },
           drop(e, v) {
-            const files = [...(e.dataTransfer?.files ?? [])].filter((f) => f.type.startsWith('image/'));
-            if (!files.length) return false;
+            const files = [...(e.dataTransfer?.files ?? [])];
+            if (!files.some(isImageFile)) return false;
             e.preventDefault(); void insertImages(v, files, v.posAtCoords({ x: e.clientX, y: e.clientY }) ?? undefined); return true;
           },
         }),

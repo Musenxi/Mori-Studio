@@ -19,7 +19,7 @@ export interface SaveResult {
   errors: Array<{ path: string; message: string }>;
   annotationWarnings?: Array<{ id: number; block: string; quote?: string }>;
 }
-export interface AssetInfo { name: string; size: number; mtime: number; width?: number; height?: number; usedBy: Array<{ kind: 'post' | 'page' | 'friends'; id: string; title: string }> }
+export interface AssetInfo { name: string; size: number; mtime: number; live?: boolean; width?: number; height?: number; usedBy: Array<{ kind: 'post' | 'page' | 'friends'; id: string; title: string }> }
 export interface GitInfo { isRepo: boolean; top?: string; nested?: boolean; branch?: string; remotes?: Array<{ name: string; url: string }>; changed?: number; last?: string }
 /** 防垃圾规则（存在评论服务里）：屏蔽词、IP 段、网址、昵称 */
 /** 邮件提醒（存在评论服务里）。密码、Key 读回来是空的，has* 表示填过；保存时留空表示不改 */
@@ -77,6 +77,20 @@ export const api = {
     if (!r.ok) throw new ApiError(j.error ?? '上传失败', r.status);
     return j as { ok: true; name: string };
   },
+  /** 上传一批文件：图片（HEIC 在服务端转成 JPEG）；和图片同名的 .mov / .mp4 是实况照片的视频，跟着那张图片传。返回存下的图片文件名 */
+  uploadImages: async (files: File[]) => {
+    const videos = new Map(files.filter(isVideoFile).map((f) => [stemOf(f.name), f]));
+    const names: string[] = [];
+    for (const f of files.filter(isImageFile)) {
+      const { name } = await api.upload(f);
+      names.push(name);
+      const video = videos.get(stemOf(f.name));
+      if (!video) continue;
+      const r = await fetch(`/api/asset/${encodeURIComponent(name)}/live`, { method: 'PUT', body: video });
+      if (!r.ok) throw new ApiError((await r.json().catch(() => ({}))).error ?? '上传失败', r.status);
+    }
+    return names;
+  },
 
   importGpx: async (file: File) => {
     const r = await fetch('/api/gpx', { method: 'POST', body: file });
@@ -114,4 +128,10 @@ export const api = {
   publish: (onChunk: (t: string) => void) => stream('/api/publish', onChunk),
 };
 
+const extOf = (n: string) => n.slice(n.lastIndexOf('.')).toLowerCase();
+const stemOf = (n: string) => n.slice(0, n.lastIndexOf('.')).toLowerCase();
+export const isImageFile = (f: File) => f.type.startsWith('image/') || ['.heic', '.heif'].includes(extOf(f.name));
+export const isVideoFile = (f: File) => ['.mov', '.mp4'].includes(extOf(f.name));
+/** 文件选择框接受的类型：图片、HEIC、实况照片的视频 */
+export const IMAGE_ACCEPT = 'image/*,.heic,.heif,.mov,.mp4';
 export const assetUrl = (name: string, w = 240) => `/asset/${encodeURIComponent(name)}?w=${w}`;

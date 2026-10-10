@@ -50,7 +50,7 @@ export function MarkdownView({ doc, setDoc }: { doc: Doc; setDoc: (fn: (d: Doc) 
       // 新文章（正文还是空的）：光标放在标题后面的空行，直接接着写
       cursor: (initial.current.blocks ?? []).every((b: Doc) => b.type === 'p' && !JSON.stringify(b.text ?? '').replace(/["\[\]{}:,]|"t"/g, '').trim()) ? 'end' : 'start',
       onChange: (text) => { pending = text; clearTimeout(timer); timer = setTimeout(apply, 250); },
-      onImages: async (files) => { const names: string[] = []; for (const f of files) names.push((await api.upload(f)).name); await refresh(); return names; },
+      onImages: async (files) => { const names = await api.uploadImages(files); await refresh(); return names; },
     });
     ed.current = editor;
     editor.focus();

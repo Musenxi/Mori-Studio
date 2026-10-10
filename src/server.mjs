@@ -4,18 +4,19 @@
  */
 import { createServer } from 'node:http';
 import { createReadStream, existsSync, statSync, readFileSync, writeFileSync, utimesSync } from 'node:fs';
-import { join, extname, normalize, resolve, dirname } from 'node:path';
+import { join, extname, normalize, resolve, dirname, basename } from 'node:path';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
 import sharp from 'sharp';
 import { avatarTemplate } from 'astro-mori/avatar';
-import { RESERVED_SLUGS, assetUsage, trashAsset, loadConfig, setConfigValue, setHead, setCategories, setPublish, setNav, setActions, listPages, readFriends, writeFriends, readFriendsLost, writeFriendsLost, formatFriends, parseFriends, renameCategoryInEntries, renameTag, countPages, listEntries, readEntry, writeEntry, entryExists, skeleton, trashEntry, publishEntry, unpublishEntry, discardDraft, listAssets, saveAsset, isId, KINDS, IMAGE_EXT } from './project.mjs';
+import { RESERVED_SLUGS, assetUsage, trashAsset, loadConfig, setConfigValue, setHead, setCategories, setPublish, setNav, setActions, listPages, readFriends, writeFriends, readFriendsLost, writeFriendsLost, formatFriends, parseFriends, renameCategoryInEntries, renameTag, countPages, listEntries, readEntry, writeEntry, entryExists, skeleton, trashEntry, publishEntry, unpublishEntry, discardDraft, listAssets, saveAsset, liveVideo, isId, KINDS, IMAGE_EXT } from './project.mjs';
 import { validateEntry } from 'astro-mori/validate';
 import { locate } from 'astro-mori/anchor';
 import { normalizeDoc } from 'astro-mori/flow';
 import { probeSite } from './probe.mjs';
 import { gitInfo, gitInit, publishGit, publishLocal } from './publish.mjs';
+import { HEIC_EXT, heicToJpeg, toWebMp4 } from './media.mjs';
 import { parseGpx, simplify, readExif, clusterStops } from './geo.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -399,10 +400,22 @@ export async function startStudio({ root, port = 4400, dev = false }) {
       }
 
       /* ── 图片 ── */
-      if (req.method === 'PUT' && (mm = m(/^\/api\/asset\/(.+)$/))) {
+      // 实况照片的视频：传给已经存好的那张图片，转成同名 .mp4
+      if (req.method === 'PUT' && (mm = m(/^\/api\/asset\/(.+)\/live$/))) {
         const name = decodeURIComponent(mm[1]);
-        if (!IMAGE_EXT.has(extname(name).toLowerCase())) return send(res, 400, { error: '只接受图片文件' });
-        const saved = saveAsset(root, name, await readBody(req));
+        if (basename(name) !== name || !IMAGE_EXT.has(extname(name).toLowerCase()) || !existsSync(join(root, 'src/assets', name))) return send(res, 400, { error: '没有这张图片' });
+        try { await toWebMp4(await readBody(req), liveVideo(root, name)); } catch (e) { return send(res, 400, { error: e.message }); }
+        return send(res, 200, { ok: true });
+      }
+      if (req.method === 'PUT' && (mm = m(/^\/api\/asset\/(.+)$/))) {
+        let name = decodeURIComponent(mm[1]);
+        let body = await readBody(req);
+        const ext = extname(name).toLowerCase();
+        if (HEIC_EXT.has(ext)) {
+          try { body = await heicToJpeg(body); } catch (e) { return send(res, 400, { error: e.message }); }
+          name = `${name.slice(0, -ext.length)}.jpg`;
+        } else if (!IMAGE_EXT.has(ext)) return send(res, 400, { error: '只接受图片文件' });
+        const saved = saveAsset(root, name, body);
         return send(res, 200, { ok: true, name: saved });
       }
 

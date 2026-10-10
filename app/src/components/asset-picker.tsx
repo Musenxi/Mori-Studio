@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import { ImagePlus, Upload, X } from 'lucide-react';
 import { toast } from 'sonner';
-import { api, assetUrl } from '@/lib/api';
+import { api, assetUrl, IMAGE_ACCEPT, isImageFile } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import { useProject, useRefresh } from '@/lib/hooks';
 import { Button } from '@/components/ui/button';
@@ -24,15 +24,13 @@ export function AssetDialog({ open, onOpenChange, onPick }: { open: boolean; onO
   const assets = (project?.assets ?? []).filter((n) => n.toLowerCase().includes(q.toLowerCase()));
 
   const upload = async (files: File[]) => {
-    const imgs = files.filter((f) => f.type.startsWith('image/'));
-    if (!imgs.length) return toast.error('只能上传图片');
+    if (!files.some(isImageFile)) return toast.error('只能上传图片');
     setBusy(true);
     try {
-      let last = '';
-      for (const f of imgs) last = (await api.upload(f)).name;
+      const names = await api.uploadImages(files);
       await refresh();
-      if (imgs.length === 1 && last) onPick(last);
-      else toast.success(`已上传 ${imgs.length} 张`);
+      if (names.length === 1) onPick(names[0]);
+      else toast.success(`已上传 ${names.length} 张`);
     } catch (e) { toast.error((e as Error).message); }
     setBusy(false);
   };
@@ -47,7 +45,7 @@ export function AssetDialog({ open, onOpenChange, onPick }: { open: boolean; onO
         >
           <Upload size={16} />
           <span className="flex-1">{busy ? '上传中……' : '把图片拖到这里，或'}</span>
-          <input ref={input} type="file" accept="image/*" multiple hidden onChange={(e) => { void upload([...(e.target.files ?? [])]); e.target.value = ''; }} />
+          <input ref={input} type="file" accept={IMAGE_ACCEPT} multiple hidden onChange={(e) => { void upload([...(e.target.files ?? [])]); e.target.value = ''; }} />
           <Button size="sm" variant="secondary" onClick={() => input.current?.click()} disabled={busy}>选择文件</Button>
         </div>
         {(project?.assets.length ?? 0) > 8 && <Input className="mt-3" value={q} onChange={(e) => setQ(e.target.value)} placeholder="按文件名找" />}

@@ -143,11 +143,11 @@ export function listAssets(root) {
 export function saveAsset(root, name, buffer) {
   const dir = join(root, 'src/assets');
   mkdirSync(dir, { recursive: true });
-  // 只留文件名，去掉路径；不覆盖已有文件（同名就加序号）
+  // 只留文件名，去掉路径；不覆盖已有文件（同名就加序号）。别的图片的实况视频也占着名字（a.jpg 的 a.mp4 不能让给 a.png）
   let safe = basename(name).replace(/[^\w.\-一-龥]+/g, '_');
   const ext = extname(safe), stem = safe.slice(0, safe.length - ext.length);
   let k = 1;
-  while (existsSync(join(dir, safe))) safe = `${stem}-${++k}${ext}`;
+  while (existsSync(join(dir, safe)) || existsSync(liveVideo(root, safe))) safe = `${stem}-${++k}${ext}`;
   writeFileSync(join(dir, safe), buffer);
   return safe;
 }
@@ -552,16 +552,22 @@ export function assetUsage(root) {
   if (existsSync(fr)) texts.push({ raw: readFileSync(fr, 'utf8'), ref: { kind: 'friends', id: 'friends', title: '友人帐' } });
   return names.map((name) => {
     const st = statSync(join(root, 'src/assets', name));
-    return { name, size: st.size, mtime: Math.round(st.mtimeMs), usedBy: texts.filter((t) => t.raw.includes(`assets/${name}`)).map((t) => t.ref) };
+    return { name, size: st.size, mtime: Math.round(st.mtimeMs), live: existsSync(liveVideo(root, name)), usedBy: texts.filter((t) => t.raw.includes(`assets/${name}`)).map((t) => t.ref) };
   });
 }
 
-/** 删除一张图片：移进 .mori-trash/assets/，不真的删 */
+/** 实况照片的视频：和图片同名的 .mp4，放在图片旁边 */
+export const liveVideo = (root, name) => join(root, 'src/assets', `${basename(name, extname(name))}.mp4`);
+
+/** 删除一张图片（连同实况视频）：移进 .mori-trash/assets/，不真的删 */
 export function trashAsset(root, name) {
   if (basename(name) !== name || !IMAGE_EXT.has(extname(name).toLowerCase())) throw new Error('文件名不合法');
   const from = join(root, 'src/assets', name);
   if (!existsSync(from)) throw new Error('没有这张图片');
   const trash = join(root, '.mori-trash/assets');
   mkdirSync(trash, { recursive: true });
-  renameSync(from, join(trash, `${Date.now()}-${name}`));
+  const now = Date.now();
+  renameSync(from, join(trash, `${now}-${name}`));
+  const video = liveVideo(root, name);
+  if (existsSync(video)) renameSync(video, join(trash, `${now}-${basename(video)}`));
 }
