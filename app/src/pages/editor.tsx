@@ -1,5 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
+import { AssetFolder, folderOf } from '@/lib/folder';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ChevronLeft, Eye, ExternalLink, PanelRight, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
@@ -29,7 +30,8 @@ export default function Editor({ kind }: { kind: 'post' | 'page' }) {
   if (error) return <div className="grid h-full place-items-center px-8 text-center text-muted-foreground">{(error as Error).message}<Link to={kind === 'page' ? '/pages' : '/posts'} className="mt-3 underline">回到列表</Link></div>;
   if (isPending) return <div className="grid h-full place-items-center text-muted-foreground">读取中……</div>;
   // 以前的游记（stops + 每个块属于一站）打开时转成现在的结构；改动保存时才写回文件
-  return <Session key={`${kind}/${id}`} routeKind={kind} id={id} initial={kind === 'post' ? normalizeDoc(data) : data} />;
+  // 图片默认存进这篇文章自己的文件夹（图库、拖入、粘贴都是）
+  return <AssetFolder.Provider value={folderOf(kind, id)}><Session key={`${kind}/${id}`} routeKind={kind} id={id} initial={kind === 'post' ? normalizeDoc(data) : data} /></AssetFolder.Provider>;
 }
 
 function Session({ routeKind, id, initial }: { routeKind: 'post' | 'page'; id: string; initial: Doc }) {

@@ -13,7 +13,7 @@ import { assetUrl } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import type { Doc } from '@/lib/types';
 import * as ops from '@/lib/layout-ops.js';
-import { assetName } from '@/components/asset-picker';
+import { assetOf } from '@/lib/folder';
 import { Tip } from '@/components/tip';
 import { useLayout, type PlaceInfo } from './layout-ctx';
 import { Deco, Unit, useEditHost } from './layout-text';
@@ -27,7 +27,7 @@ export const NAMES: Record<string, string> = { head: '标题', text: '文字', i
 /** 舞台占可用高度的比例：小一点能一眼看到更多 */
 export const ZOOMS: Record<string, number> = { s: 0.5, m: 0.72, l: 1 };
 export const ZOOM_KEY = 'mori-studio-layout-zoom';
-const imgSrc = (src?: string) => (!src ? '' : /^(https?:|data:|\/)/.test(src) ? src : assetUrl(assetName(src), 900));
+const imgSrc = (src?: string) => (!src ? '' : /^(https?:|data:|\/)/.test(src) ? src : assetUrl(assetOf(src), 900));
 /** 能拖大小的块：图都能；文字只有竖排的（大小就是竖排的高度）；标题的框按字的长短 */
 /** 没设上下位置时在哪：标题在顶上，别的居中 */
 export const yOf = (b: Doc) => (b.type === 'head' ? 0 : 0.5);

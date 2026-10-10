@@ -11,7 +11,7 @@ import { cn } from '@/lib/cn';
 import type { Doc } from '@/lib/types';
 import * as ops from '@/lib/layout-ops.js';
 import * as t from '@/lib/text-ops.js';
-import { assetName } from '@/components/asset-picker';
+import { assetOf, baseName } from '@/lib/folder';
 import { NumInput } from '@/components/field';
 import { Segmented } from '@/components/segmented';
 import { Button } from '@/components/ui/button';
@@ -44,7 +44,7 @@ function labelOf(b: Doc) {
   if (ops.isTextItem(b)) return (b.blocks ?? []).map(blockPlain).join(' ').trim().slice(0, 40);
   if (b.type === 'map') return '';
   const ims = ops.imagesOf(b);
-  return ims.map((i: Doc) => i.caption).filter(Boolean).join(' / ') || (ims.length > 1 ? `${ims.length} 张` : assetName(ims[0]?.src));
+  return ims.map((i: Doc) => i.caption).filter(Boolean).join(' / ') || (ims.length > 1 ? `${ims.length} 张` : baseName(assetOf(ims[0]?.src)));
 }
 
 function Outline() {
@@ -181,10 +181,10 @@ function PlaceProps({ b, raw, place }: { b: Doc; raw: Doc; place: (p: Doc) => vo
 /* ───────────── 图片 ───────────── */
 
 function Thumb({ src, onClick }: { src?: string; onClick: () => void }) {
-  const name = assetName(src);
+  const path = assetOf(src);
   return (
     <button type="button" onClick={onClick} aria-label="更换" className="grid h-14 w-16 shrink-0 place-items-center overflow-hidden rounded-md bg-muted text-muted-foreground transition-[box-shadow] hover:ring-2 hover:ring-foreground/25">
-      {name ? <img src={assetUrl(name, 160)} alt="" className="h-full w-full object-cover" /> : <ImagePlus size={16} />}
+      {path ? <img src={assetUrl(path, 160)} alt="" className="h-full w-full object-cover" /> : <ImagePlus size={16} />}
     </button>
   );
 }

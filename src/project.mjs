@@ -3,14 +3,15 @@
  * 不需要 git；“删除”是移进 .mori-trash/，不会真的删掉。
  */
 import { readdirSync, readFileSync, writeFileSync, existsSync, mkdirSync, renameSync, statSync, copyFileSync, rmSync } from 'node:fs';
-import { join, basename, extname } from 'node:path';
+import { join, basename } from 'node:path';
 import { loadConfigFromFile } from 'vite';
+import { folderOf, retireFolder } from './library.mjs';
 
 /** 文章都在 src/content/posts/ 下（travel 是游记并进文章之前的叫法，接口还认） */
 export const KINDS = { post: 'posts', travel: 'posts', page: 'pages' };
 export const kindOf = () => 'post';
 const ID = /^[a-z0-9][a-z0-9_-]*$/i;
-export const IMAGE_EXT = new Set(['.jpg', '.jpeg', '.png', '.webp', '.avif', '.gif', '.svg']);
+export { IMAGE_EXT } from './library.mjs';
 
 export const isId = (s) => typeof s === 'string' && ID.test(s);
 const dirOf = (root, kind) => join(root, 'src/content', KINDS[kind]);
@@ -105,6 +106,8 @@ export function trashEntry(root, kind, id) {
   const stamp = Date.now();
   renameSync(fileOf(root, kind, id), join(trash, `${stamp}-${kind}-${id}.json`));
   if (existsSync(pubFileOf(root, kind, id))) renameSync(pubFileOf(root, kind, id), join(trash, `${stamp}-${kind}-${id}.published.json`));
+  // 它的图片文件夹：别处还在用的图移进共用，其余一起进回收站
+  retireFolder(root, folderOf(kind, id), kindOf, stamp);
 }
 
 /** 发布：取消草稿标记，正在写的版本成为已发布版本 */
@@ -132,24 +135,6 @@ export function discardDraft(root, kind, id) {
   if (existsSync(pf)) { copyFileSync(pf, fileOf(root, kind, id)); return { removed: false }; }
   trashEntry(root, kind, id);
   return { removed: true };
-}
-
-export function listAssets(root) {
-  const dir = join(root, 'src/assets');
-  if (!existsSync(dir)) return [];
-  return readdirSync(dir).filter((f) => IMAGE_EXT.has(extname(f).toLowerCase())).sort();
-}
-
-export function saveAsset(root, name, buffer) {
-  const dir = join(root, 'src/assets');
-  mkdirSync(dir, { recursive: true });
-  // 只留文件名，去掉路径；不覆盖已有文件（同名就加序号）。别的图片的实况视频也占着名字（a.jpg 的 a.mp4 不能让给 a.png）
-  let safe = basename(name).replace(/[^\w.\-一-龥]+/g, '_');
-  const ext = extname(safe), stem = safe.slice(0, safe.length - ext.length);
-  let k = 1;
-  while (existsSync(join(dir, safe)) || existsSync(liveVideo(root, safe))) safe = `${stem}-${++k}${ext}`;
-  writeFileSync(join(dir, safe), buffer);
-  return safe;
 }
 
 /* ───────────── mori.config.ts 里的单行字符串设置 ───────────── */
@@ -534,40 +519,3 @@ export function setActions(configPath, actions) {
   }));
 }
 
-/* ───────────── 文件（src/assets 里的图片）：谁在用它、删除 ───────────── */
-
-/** 每张图片的大小、修改时间，以及被哪些内容引用（文章、页面、友人帐） */
-export function assetUsage(root) {
-  const names = listAssets(root);
-  const texts = [];
-  for (const [kind, dir] of [['post', 'posts'], ['page', 'pages']]) {
-    const d = join(root, 'src/content', dir);
-    if (!existsSync(d)) continue;
-    for (const f of readdirSync(d).filter((f) => f.endsWith('.json'))) {
-      const id = basename(f, '.json');
-      try { const raw = readFileSync(join(d, f), 'utf8'); const doc = JSON.parse(raw); texts.push({ raw, ref: { kind: kind === 'post' ? kindOf(doc) : 'page', id, title: doc.title ?? id } }); } catch { /* 有语法错误的文件跳过 */ }
-    }
-  }
-  const fr = friendsFile(root);
-  if (existsSync(fr)) texts.push({ raw: readFileSync(fr, 'utf8'), ref: { kind: 'friends', id: 'friends', title: '友人帐' } });
-  return names.map((name) => {
-    const st = statSync(join(root, 'src/assets', name));
-    return { name, size: st.size, mtime: Math.round(st.mtimeMs), live: existsSync(liveVideo(root, name)), usedBy: texts.filter((t) => t.raw.includes(`assets/${name}`)).map((t) => t.ref) };
-  });
-}
-
-/** 实况照片的视频：和图片同名的 .mp4，放在图片旁边 */
-export const liveVideo = (root, name) => join(root, 'src/assets', `${basename(name, extname(name))}.mp4`);
-
-/** 删除一张图片（连同实况视频）：移进 .mori-trash/assets/，不真的删 */
-export function trashAsset(root, name) {
-  if (basename(name) !== name || !IMAGE_EXT.has(extname(name).toLowerCase())) throw new Error('文件名不合法');
-  const from = join(root, 'src/assets', name);
-  if (!existsSync(from)) throw new Error('没有这张图片');
-  const trash = join(root, '.mori-trash/assets');
-  mkdirSync(trash, { recursive: true });
-  const now = Date.now();
-  renameSync(from, join(trash, `${now}-${name}`));
-  const video = liveVideo(root, name);
-  if (existsSync(video)) renameSync(video, join(trash, `${now}-${basename(video)}`));
-}

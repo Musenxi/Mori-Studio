@@ -10,13 +10,14 @@ import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
 import sharp from 'sharp';
 import { avatarTemplate } from 'astro-mori/avatar';
-import { RESERVED_SLUGS, assetUsage, trashAsset, loadConfig, setConfigValue, setHead, setCategories, setPublish, setNav, setActions, listPages, readFriends, writeFriends, readFriendsLost, writeFriendsLost, formatFriends, parseFriends, renameCategoryInEntries, renameTag, countPages, listEntries, readEntry, writeEntry, entryExists, skeleton, trashEntry, publishEntry, unpublishEntry, discardDraft, listAssets, saveAsset, liveVideo, isId, KINDS, IMAGE_EXT } from './project.mjs';
+import { RESERVED_SLUGS, loadConfig, setConfigValue, setHead, setCategories, setPublish, setNav, setActions, listPages, readFriends, writeFriends, readFriendsLost, writeFriendsLost, formatFriends, parseFriends, renameCategoryInEntries, renameTag, countPages, listEntries, readEntry, writeEntry, entryExists, skeleton, trashEntry, publishEntry, unpublishEntry, discardDraft, kindOf, isId, KINDS, IMAGE_EXT } from './project.mjs';
 import { validateEntry } from 'astro-mori/validate';
 import { locate } from 'astro-mori/anchor';
 import { normalizeDoc } from 'astro-mori/flow';
 import { probeSite } from './probe.mjs';
 import { gitInfo, gitInit, publishGit, publishLocal } from './publish.mjs';
 import { HEIC_EXT, heicToJpeg, uprightJpeg, toWebMp4 } from './media.mjs';
+import { listAssets, saveAsset, liveVideo, assetUsage, trashAsset, moveAssets, mergeAssets, indexAssets, rememberOrigin, findSame, similarGroups, sha256, cleanRel, SHARED } from './library.mjs';
 import { parseGpx, simplify, readExif, clusterStops } from './geo.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -386,38 +387,56 @@ export async function startStudio({ root, port = 4400, dev = false }) {
         return send(res, 200, { photos: photos.length, withGps: gps, stops: clusterStops(photos) });
       }
 
-      /* ── 文件：图片列表（含尺寸、被谁引用）、删除 ── */
+      /* ── 文件：图片列表（含尺寸、被谁引用、看起来一样的分组）、上传、移动、删除 ── */
       if (req.method === 'GET' && p === '/api/assets') {
-        const list = assetUsage(root);
-        for (const a of list) {
-          if (a.name.toLowerCase().endsWith('.svg')) continue;
-          try { const m = await sharp(join(root, 'src/assets', a.name)).metadata(); a.width = m.autoOrient?.width ?? m.width; a.height = m.autoOrient?.height ?? m.height; } catch { /* 读不出尺寸就不显示 */ }
-        }
-        return send(res, 200, { assets: list.sort((a, b) => b.mtime - a.mtime) });
+        const idx = await indexAssets(root);
+        const assets = assetUsage(root, kindOf).map((a) => ({ ...a, width: idx[a.path]?.width, height: idx[a.path]?.height }));
+        return send(res, 200, { assets: assets.sort((a, b) => b.mtime - a.mtime), similar: similarGroups(idx) });
       }
-      if (req.method === 'DELETE' && (mm = m(/^\/api\/asset\/(.+)$/))) {
-        try { trashAsset(root, decodeURIComponent(mm[1])); return send(res, 200, { ok: true }); } catch (e) { return send(res, 400, { error: e.message }); }
+      // 上传到某个文件夹：内容完全相同的图已经有了就不再存，直接用原来那张（dup: true）
+      if (req.method === 'PUT' && p === '/api/assets/upload') {
+        let name = url.searchParams.get('name') ?? '';
+        let folder;
+        try { folder = cleanRel(url.searchParams.get('folder') ?? SHARED, { folder: true }); } catch (e) { return send(res, 400, { error: e.message }); }
+        const raw = await readBody(req);
+        const orig = sha256(raw);
+        const ext = extname(name).toLowerCase();
+        if (!HEIC_EXT.has(ext) && !IMAGE_EXT.has(ext)) return send(res, 400, { error: '只接受图片文件' });
+        const known = await findSame(root, [orig]);
+        if (known) return send(res, 200, { ok: true, path: known, dup: true });
+        let body = raw;
+        if (HEIC_EXT.has(ext)) {
+          try { body = await heicToJpeg(raw); } catch (e) { return send(res, 400, { error: e.message }); }
+          name = `${name.slice(0, -ext.length)}.jpg`;
+        } else try { body = await uprightJpeg(raw); } catch { /* 读不了的图原样存，构建时再报 */ }
+        const same = body === raw ? undefined : await findSame(root, [sha256(body)]);
+        if (same) return send(res, 200, { ok: true, path: same, dup: true });
+        const saved = saveAsset(root, folder, name, body);
+        rememberOrigin(root, saved, orig);
+        return send(res, 200, { ok: true, path: saved, dup: false });
       }
-
-      /* ── 图片 ── */
-      // 实况照片的视频：传给已经存好的那张图片，转成同名 .mp4
-      if (req.method === 'PUT' && (mm = m(/^\/api\/asset\/(.+)\/live$/))) {
-        const name = decodeURIComponent(mm[1]);
-        if (basename(name) !== name || !IMAGE_EXT.has(extname(name).toLowerCase()) || !existsSync(join(root, 'src/assets', name))) return send(res, 400, { error: '没有这张图片' });
-        try { await toWebMp4(await readBody(req), liveVideo(root, name)); } catch (e) { return send(res, 400, { error: e.message }); }
+      // 实况照片的视频：传给已经存好的那张图片，转成同名 .mp4（已经有就不再转）
+      if (req.method === 'PUT' && p === '/api/assets/live') {
+        let rel;
+        try { rel = cleanRel(url.searchParams.get('path')); } catch (e) { return send(res, 400, { error: e.message }); }
+        if (!existsSync(join(root, 'src/assets', rel))) return send(res, 400, { error: '没有这张图片' });
+        const body = await readBody(req);
+        if (existsSync(liveVideo(root, rel))) return send(res, 200, { ok: true });
+        try { await toWebMp4(body, liveVideo(root, rel)); } catch (e) { return send(res, 400, { error: e.message }); }
         return send(res, 200, { ok: true });
       }
-      if (req.method === 'PUT' && (mm = m(/^\/api\/asset\/(.+)$/))) {
-        let name = decodeURIComponent(mm[1]);
-        let body = await readBody(req);
-        const ext = extname(name).toLowerCase();
-        if (HEIC_EXT.has(ext)) {
-          try { body = await heicToJpeg(body); } catch (e) { return send(res, 400, { error: e.message }); }
-          name = `${name.slice(0, -ext.length)}.jpg`;
-        } else if (!IMAGE_EXT.has(ext)) return send(res, 400, { error: '只接受图片文件' });
-        else try { body = await uprightJpeg(body); } catch { /* 读不了的图原样存，构建时再报 */ }
-        const saved = saveAsset(root, name, body);
-        return send(res, 200, { ok: true, name: saved });
+      if (req.method === 'POST' && p === '/api/assets/move') {
+        try {
+          const { paths, folder } = await readJson(req);
+          const map = moveAssets(root, paths ?? [], folder ?? '');
+          return send(res, 200, { ok: true, moved: Object.fromEntries(map) });
+        } catch (e) { return send(res, 400, { error: e.message }); }
+      }
+      if (req.method === 'POST' && p === '/api/assets/merge') {
+        try { const { keep, drops } = await readJson(req); mergeAssets(root, keep, drops ?? []); return send(res, 200, { ok: true }); } catch (e) { return send(res, 400, { error: e.message }); }
+      }
+      if (req.method === 'DELETE' && p === '/api/assets') {
+        try { trashAsset(root, url.searchParams.get('path')); return send(res, 200, { ok: true }); } catch (e) { return send(res, 400, { error: e.message }); }
       }
 
       /* ── 预览：用项目自己的 astro dev（真实主题渲染） ── */

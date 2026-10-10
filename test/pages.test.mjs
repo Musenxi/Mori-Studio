@@ -101,7 +101,8 @@ test('内网地址判断', () => {
   for (const ip of ['8.8.8.8', '93.184.216.34', '172.32.0.1']) assert.ok(!isPrivateAddress(ip), ip);
 });
 
-import { assetUsage, trashAsset } from '../src/project.mjs';
+import { assetUsage, trashAsset } from '../src/library.mjs';
+import { kindOf } from '../src/project.mjs';
 import { existsSync } from 'node:fs';
 
 test('文件：谁在引用一张图片；删除是移进回收站', () => {
@@ -112,7 +113,7 @@ test('文件：谁在引用一张图片；删除是移进回收站', () => {
   writeFileSync(join(root, 'src/content/posts/t1.json'), JSON.stringify({ title: 'T1', stops: [], blocks: [{ src: '../../assets/a.jpg' }] }));
   writeFileSync(join(root, 'src/content/pages/about.json'), JSON.stringify({ title: '关于', blocks: [{ src: '../../assets/b.jpg' }] }));
   writeFileSync(join(root, 'src/content/friends.json'), JSON.stringify([{ id: 'x', name: 'X', url: 'https://x.io', avatar: '../assets/c.png' }]));
-  const u = Object.fromEntries(assetUsage(root).map((a) => [a.name, a.usedBy.map((r) => `${r.kind}:${r.id}`)]));
+  const u = Object.fromEntries(assetUsage(root, kindOf).map((a) => [a.name, a.usedBy.map((r) => `${r.kind}:${r.id}`)]));
   assert.deepEqual(u['a.jpg'].sort(), ['post:p1', 'post:t1']);
   assert.deepEqual(u['b.jpg'], ['page:about']);
   assert.deepEqual(u['c.png'], ['friends:friends']);

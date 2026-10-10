@@ -19,7 +19,8 @@ export interface SaveResult {
   errors: Array<{ path: string; message: string }>;
   annotationWarnings?: Array<{ id: number; block: string; quote?: string }>;
 }
-export interface AssetInfo { name: string; size: number; mtime: number; live?: boolean; width?: number; height?: number; usedBy: Array<{ kind: 'post' | 'page' | 'friends'; id: string; title: string }> }
+/** 图片：path 是它在 src/assets 下的相对路径（posts/hello/IMG.jpg），folder 是所在文件夹（'' 是未归类） */
+export interface AssetInfo { path: string; folder: string; name: string; size: number; mtime: number; live?: boolean; width?: number; height?: number; usedBy: Array<{ kind: 'post' | 'page' | 'friends'; id: string; title: string }> }
 export interface GitInfo { isRepo: boolean; top?: string; nested?: boolean; branch?: string; remotes?: Array<{ name: string; url: string }>; changed?: number; last?: string }
 /** 防垃圾规则（存在评论服务里）：屏蔽词、IP 段、网址、昵称 */
 /** 邮件提醒（存在评论服务里）。密码、Key 读回来是空的，has* 表示填过；保存时留空表示不改 */
@@ -71,25 +72,28 @@ export const api = {
   friends: () => req<{ friends: Friend[]; text: string; lost: string }>('GET', '/api/friends'),
   saveFriends: (text: string, lost: string) => req<{ ok: true; friends: Friend[]; text: string; lost: string }>('PUT', '/api/friends', { text, lost }),
 
-  upload: async (file: File) => {
-    const r = await fetch(`/api/asset/${encodeURIComponent(file.name)}`, { method: 'PUT', body: file });
+  /** 上传一张图到某个文件夹；内容完全相同的图已经有了，就返回原来那张（dup） */
+  upload: async (file: File, folder: string) => {
+    const r = await fetch(`/api/assets/upload?folder=${encodeURIComponent(folder)}&name=${encodeURIComponent(file.name)}`, { method: 'PUT', body: file });
     const j = await r.json().catch(() => ({}));
     if (!r.ok) throw new ApiError(j.error ?? '上传失败', r.status);
-    return j as { ok: true; name: string };
+    return j as { ok: true; path: string; dup: boolean };
   },
-  /** 上传一批文件：图片（HEIC 在服务端转成 JPEG）；和图片同名的 .mov / .mp4 是实况照片的视频，跟着那张图片传。返回存下的图片文件名 */
-  uploadImages: async (files: File[]) => {
+  /** 上传一批文件：图片（HEIC 在服务端转成 JPEG）；和图片同名的 .mov / .mp4 是实况照片的视频，跟着那张图片传。返回存下（或认出已有）的图片路径 */
+  uploadImages: async (files: File[], folder: string) => {
     const videos = new Map(files.filter(isVideoFile).map((f) => [stemOf(f.name), f]));
-    const names: string[] = [];
+    const paths: string[] = [];
+    let dups = 0;
     for (const f of files.filter(isImageFile)) {
-      const { name } = await api.upload(f);
-      names.push(name);
+      const { path, dup } = await api.upload(f, folder);
+      paths.push(path);
+      if (dup) dups++;
       const video = videos.get(stemOf(f.name));
       if (!video) continue;
-      const r = await fetch(`/api/asset/${encodeURIComponent(name)}/live`, { method: 'PUT', body: video });
+      const r = await fetch(`/api/assets/live?path=${encodeURIComponent(path)}`, { method: 'PUT', body: video });
       if (!r.ok) throw new ApiError((await r.json().catch(() => ({}))).error ?? '上传失败', r.status);
     }
-    return names;
+    return { paths, dups };
   },
 
   importGpx: async (file: File) => {
@@ -101,8 +105,10 @@ export const api = {
   geocode: (q: string) => req<{ lnglat: [number, number]; name: string }>('GET', `/api/geocode?q=${encodeURIComponent(q)}`),
   exif: () => req<{ photos: number; withGps: number; stops: Array<{ lnglat: [number, number]; date?: string; count: number }> }>('GET', '/api/exif'),
 
-  assets: () => req<{ assets: AssetInfo[] }>('GET', '/api/assets'),
-  removeAsset: (name: string) => req<{ ok: true }>('DELETE', `/api/asset/${encodeURIComponent(name)}`),
+  assets: () => req<{ assets: AssetInfo[]; similar: string[][] }>('GET', '/api/assets'),
+  moveAssets: (paths: string[], folder: string) => req<{ ok: true; moved: Record<string, string> }>('POST', '/api/assets/move', { paths, folder }),
+  mergeAssets: (keep: string, drops: string[]) => req<{ ok: true }>('POST', '/api/assets/merge', { keep, drops }),
+  removeAsset: (path: string) => req<{ ok: true }>('DELETE', `/api/assets?path=${encodeURIComponent(path)}`),
 
   comments: (status?: string) => req<{ comments: CommentRow[] }>('GET', `/api/comments${status ? `?status=${status}` : ''}`),
   commentStats: () => req<{ pending: number; approved: number; hidden: number; spam: number }>('GET', '/api/comments/stats'),
@@ -134,4 +140,4 @@ export const isImageFile = (f: File) => f.type.startsWith('image/') || ['.heic',
 export const isVideoFile = (f: File) => ['.mov', '.mp4'].includes(extOf(f.name));
 /** 文件选择框接受的类型：图片、HEIC、实况照片的视频 */
 export const IMAGE_ACCEPT = 'image/*,.heic,.heif,.mov,.mp4';
-export const assetUrl = (name: string, w = 240) => `/asset/${encodeURIComponent(name)}?w=${w}`;
+export const assetUrl = (path: string, w = 240) => `/asset/${path.split('/').map(encodeURIComponent).join('/')}?w=${w}`;

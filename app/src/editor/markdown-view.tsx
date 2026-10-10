@@ -4,7 +4,8 @@ import { parsePlaceHref, placeHref, placesOf } from 'astro-mori/flow';
 import { api } from '@/lib/api';
 import { countWords, wan } from '@/lib/format';
 import { useRefresh } from '@/lib/hooks';
-import { fromMarkdown, toMarkdown } from '@/lib/mdsync.js';
+import { fromMarkdown, mdImagePath, toMarkdown } from '@/lib/mdsync.js';
+import { useAssetFolder } from '@/lib/folder';
 import type { Doc } from '@/lib/types';
 import { AssetDialog } from '@/components/asset-picker';
 import { Tip } from '@/components/tip';
@@ -33,6 +34,7 @@ export function MarkdownView({ doc, setDoc }: { doc: Doc; setDoc: (fn: (d: Doc) 
   const initial = useRef(doc);
   const mine = useRef(''); // 上一次由这里解析出来的块：文章在别处（信息面板里改地点的坐标）改了，再把文本同步过来
   const refresh = useRefresh();
+  const folder = useAssetFolder();
   const [lib, setLib] = useState(false);
   const [place, setPin] = useState<{ target: PlaceTarget; initial: PlaceForm; editing: boolean } | null>(null);
   const words = useMemo(() => countWords(doc), [doc]);
@@ -43,14 +45,14 @@ export function MarkdownView({ doc, setDoc }: { doc: Doc; setDoc: (fn: (d: Doc) 
     const apply = () => {
       if (pending === null) return;
       const text = pending; pending = null;
-      setDoc((d) => { const next = fromMarkdown(text, d); mine.current = JSON.stringify(next.blocks); return next; });
+      setDoc((d) => { const next = fromMarkdown(text, d, folder); mine.current = JSON.stringify(next.blocks); return next; });
     };
     const editor = createEditor({
-      parent: host.current!, doc: toMarkdown(initial.current), placeholder: '# 标题\n\n开始写……',
+      parent: host.current!, doc: toMarkdown(initial.current, folder), placeholder: '# 标题\n\n开始写……',
       // 新文章（正文还是空的）：光标放在标题后面的空行，直接接着写
       cursor: (initial.current.blocks ?? []).every((b: Doc) => b.type === 'p' && !JSON.stringify(b.text ?? '').replace(/["\[\]{}:,]|"t"/g, '').trim()) ? 'end' : 'start',
       onChange: (text) => { pending = text; clearTimeout(timer); timer = setTimeout(apply, 250); },
-      onImages: async (files) => { const names = await api.uploadImages(files); await refresh(); return names; },
+      onImages: async (files) => { const { paths } = await api.uploadImages(files, folder); await refresh(); return paths.map((p) => mdImagePath(p, folder)); },
     });
     ed.current = editor;
     editor.focus();
@@ -62,7 +64,7 @@ export function MarkdownView({ doc, setDoc }: { doc: Doc; setDoc: (fn: (d: Doc) 
     const blocks = JSON.stringify(doc.blocks);
     if (!ed.current || blocks === mine.current) return;
     mine.current = blocks;
-    const text = toMarkdown(doc);
+    const text = toMarkdown(doc, folder);
     if (text !== ed.current.getText()) ed.current.setText(text);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [doc.blocks]);
@@ -110,7 +112,7 @@ export function MarkdownView({ doc, setDoc }: { doc: Doc; setDoc: (fn: (d: Doc) 
         }}
         onRemove={() => { const t = place!.target; ed.current?.replaceRange(t.from, t.to, t.label); setPin(null); }}
       />
-      <AssetDialog open={lib} onOpenChange={setLib} onPick={(n) => { ed.current?.insertBlock(`![](${n})`); setLib(false); }} />
+      <AssetDialog open={lib} onOpenChange={setLib} onPick={(p) => { ed.current?.insertBlock(`![](${mdImagePath(p, folder)})`); setLib(false); }} />
     </div>
   );
 }

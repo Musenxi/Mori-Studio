@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { toMarkdown, fromMarkdown, similarity } from '../app/src/lib/mdsync.js';
+import { toMarkdown, fromMarkdown, similarity, mdImagePath } from '../app/src/lib/mdsync.js';
 
 const doc = () => ({
   title: '标题', date: '2025-01-01', category: 'essays', excerpt: 'x',
@@ -30,6 +30,21 @@ test('新插入的图片默认与正文同宽；已有的图片（含没写版�
   assert.equal(img('new.jpg').layout, 'inline');
   assert.equal(img('old.jpg').layout, undefined);
   assert.equal(img('a.jpg').layout, 'inline');
+});
+
+test('文件夹：本文的图只写文件名，别的文件夹写图片库路径；写回 JSON 补全', () => {
+  const d = { title: 'T', blocks: [
+    { id: 'b01', type: 'image', src: '../../assets/posts/t/a.jpg', alt: '', layout: 'inline' },
+    { id: 'b02', type: 'image', src: '../../assets/shared/s.jpg', alt: '', layout: 'inline' },
+  ] };
+  const md = toMarkdown(d, 'posts/t');
+  assert.match(md, /!\[\]\(a\.jpg\)/);
+  assert.match(md, /!\[\]\(shared\/s\.jpg\)/);
+  assert.deepEqual(fromMarkdown(md, d, 'posts/t').blocks, d.blocks);
+  const added = fromMarkdown(`${md}\n\n![](new.jpg)\n\n![](/public.png)\n`, d, 'posts/t').blocks.slice(2).map((b) => b.src);
+  assert.deepEqual(added, ['../../assets/posts/t/new.jpg', '/public.png']);
+  assert.equal(mdImagePath('posts/t/x.jpg', 'posts/t'), 'x.jpg');
+  assert.equal(mdImagePath('posts/u/x.jpg', 'posts/t'), 'posts/u/x.jpg');
 });
 
 test('图片路径在文本里只有文件名', () => assert.match(toMarkdown(doc()), /!\[图\]\(a\.jpg\)/));

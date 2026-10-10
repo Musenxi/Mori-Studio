@@ -8,9 +8,21 @@ import { parseBlocks, blocksToMarkdown, mdItems } from 'astro-mori/markdown';
 import { normalizeDoc, WRITING_BLOCKS } from 'astro-mori/flow';
 
 const ASSET = '../../assets/';
-/** 图片路径在文本里只写文件名，存进 JSON 时补上相对路径 */
-const stripAsset = (src) => (typeof src === 'string' && src.startsWith(ASSET) ? src.slice(ASSET.length) : src);
-const addAsset = (src) => (typeof src === 'string' && src && !/[/:]/.test(src) ? ASSET + src : src);
+/**
+ * 图片路径在文本里的写法：本文文件夹（folder，如 posts/hello）里的图只写文件名；别的文件夹的写图片库里的路径（shared/a.jpg）。
+ * 存进 JSON 时补成 ../../assets/<路径>。以 / . 开头或带协议的地址原样保留
+ */
+const stripAsset = (folder = '') => (src) => {
+  if (typeof src !== 'string' || !src.startsWith(ASSET)) return src;
+  const rel = src.slice(ASSET.length), pre = folder ? `${folder}/` : '';
+  return rel.startsWith(pre) && !rel.slice(pre.length).includes('/') ? rel.slice(pre.length) : rel;
+};
+const addAsset = (folder = '') => (src) => {
+  if (typeof src !== 'string' || !src || /^[/.]|:/.test(src)) return src;
+  return ASSET + (src.includes('/') ? src : `${folder ? `${folder}/` : ''}${src}`);
+};
+/** 插入图库里的一张图时，文本里该写的路径 */
+export const mdImagePath = (path, folder = '') => stripAsset(folder)(ASSET + path);
 
 const mapImg = (o, fn) => (o.src ? { ...o, src: fn(o.src) } : o);
 /** 块里所有图片的路径（单图、图组、自由排布里的图）换一种写法 */
@@ -21,9 +33,9 @@ function mapBlockImages(b, fn) {
   return b;
 }
 
-export const toMarkdown = (doc) => {
+export const toMarkdown = (doc, folder = '') => {
   const d = normalizeDoc(doc);
-  return `# ${d.title ?? ''}\n\n${blocksToMarkdown({ blocks: (d.blocks ?? []).map((b) => mapBlockImages(b, stripAsset)), notes: d.notes })}`;
+  return `# ${d.title ?? ''}\n\n${blocksToMarkdown({ blocks: (d.blocks ?? []).map((b) => mapBlockImages(b, stripAsset(folder))), notes: d.notes })}`;
 };
 
 /** 字符二元组的 Dice 系数：两段文字有多像（0–1），中文按字二元组也管用 */
@@ -62,7 +74,8 @@ function alignNotes(oldNotes = {}, parsed) {
 
 /* ───────────── 对回旧块 ───────────── */
 
-const itemKey = (it) => (it.kind === 'img' ? `i:${stripAsset(it.src ?? '')}` : `${it.kind}:${it.md}`);
+// 新旧两边的图片路径都是完整的 ../../assets/…，直接比
+const itemKey = (it) => (it.kind === 'img' ? `i:${it.src ?? ''}` : `${it.kind}:${it.md}`);
 /** 比像不像时只看文字：不看类型（把段落改成引用、加个小标题符号），也不看链接地址、粗斜体和脚注标记（给一个词加上地点，还是原来那一段） */
 const bare = (it) => (it.kind === 'img' ? '' : it.md.replace(/^(#{1,4} |> ?|[-*+] |\d+[.)] )/gm, '').replace(/\[([^\]]*)\]\([^)]*\)/g, '$1').replace(/\[\^[^\]]+\]|\*\*|[*`]/g, ''));
 
@@ -114,13 +127,13 @@ function carry(old, nb) {
 }
 
 /** 文本 → 新文档（标题、块、注释）。其余元信息不动。文本里没有一级标题就保留原标题 */
-export function fromMarkdown(text, doc) {
+export function fromMarkdown(text, doc, folder = '') {
   const base = normalizeDoc(doc);
   const oldBlocks = base.blocks ?? [];
   const parsed = parseBlocks(text);
   // 新插入的图片默认与正文同宽（已有的图片对上旧块，沿用旧块的版式）
-  const newBlocks = restoreNoteKinds(parsed.blocks, oldBlocks).map((b) => mapBlockImages(b.type === 'image' && !b.layout ? { ...b, layout: 'inline' } : b, addAsset));
-  const oldItems = mdItems(oldBlocks.map((b) => mapBlockImages(b, stripAsset)));
+  const newBlocks = restoreNoteKinds(parsed.blocks, oldBlocks).map((b) => mapBlockImages(b.type === 'image' && !b.layout ? { ...b, layout: 'inline' } : b, addAsset(folder)));
+  const oldItems = mdItems(oldBlocks);
   const newItems = mdItems(newBlocks.map((b, i) => ({ ...b, id: String(i) })));
   const match = matchItems(oldItems, newItems);
   const oldBlock = new Map(oldBlocks.map((b) => [b.id, b]));
