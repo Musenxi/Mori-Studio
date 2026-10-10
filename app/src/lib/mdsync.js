@@ -118,7 +118,8 @@ export function fromMarkdown(text, doc) {
   const base = normalizeDoc(doc);
   const oldBlocks = base.blocks ?? [];
   const parsed = parseBlocks(text);
-  const newBlocks = restoreNoteKinds(parsed.blocks, oldBlocks).map((b) => mapBlockImages(b, addAsset));
+  // 新插入的图片默认与正文同宽（已有的图片对上旧块，沿用旧块的版式）
+  const newBlocks = restoreNoteKinds(parsed.blocks, oldBlocks).map((b) => mapBlockImages(b.type === 'image' && !b.layout ? { ...b, layout: 'inline' } : b, addAsset));
   const oldItems = mdItems(oldBlocks.map((b) => mapBlockImages(b, stripAsset)));
   const newItems = mdItems(newBlocks.map((b, i) => ({ ...b, id: String(i) })));
   const match = matchItems(oldItems, newItems);

@@ -150,7 +150,7 @@ export function LayoutView({ doc, setDoc }: { doc: Doc; setDoc: (fn: (d: Doc) =>
           {canV && canH && <Segmented size="sm" className="mr-2" value={axis} onValueChange={(v) => { stopEdit(); setPick(v); }} options={[{ value: 'v', label: '竖向' }, { value: 'h', label: '横向' }]} />}
           <ToolBtn label="标题" onClick={() => insert({ type: 'h', level: 2, text: '' }, true)}><Heading2 size={15} /></ToolBtn>
           <ToolBtn label="文字" onClick={() => insert({ type: 'p', text: '', ...carry }, true)}><Pilcrow size={15} /></ToolBtn>
-          <ToolBtn label="图片" onClick={() => pickImage((src) => insert({ type: 'image', src, alt: '', layout: 'wide' }))}><ImagePlus size={15} /></ToolBtn>
+          <ToolBtn label="图片" onClick={() => pickImage((src) => insert({ type: 'image', src, alt: '', layout: 'inline' }))}><ImagePlus size={15} /></ToolBtn>
           <ToolBtn label="地图" onClick={() => insert({ type: 'map', scope: 'region' })}><MapIcon size={15} /></ToolBtn>
           <span className="ml-auto flex items-center gap-0.5">
             <Segmented size="sm" className="mr-1.5" value={zoom} onValueChange={setZoom} options={[{ value: 's', label: '小' }, { value: 'm', label: '中' }, { value: 'l', label: '大' }]} />

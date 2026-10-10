@@ -12,7 +12,7 @@ export const POST_BLOCKS: Array<{ type: string; label: string; prefix: string; m
   { type: 'p', label: '段落', prefix: 'b', make: () => ({ type: 'p', text: '' }) },
   { type: 'h', label: '标题', prefix: 'b', make: () => ({ type: 'h', level: 2, text: '' }) },
   { type: 'quote', label: '引用', prefix: 'b', make: () => ({ type: 'quote', text: '', writing: 'h' }) },
-  { type: 'image', label: '图片', prefix: 'b', make: () => ({ type: 'image', alt: '', layout: 'wide' }) },
+  { type: 'image', label: '图片', prefix: 'b', make: () => ({ type: 'image', alt: '', layout: 'inline' }) },
   { type: 'list', label: '列表', prefix: 'b', make: () => ({ type: 'list', items: [''] }) },
   { type: 'code', label: '代码', prefix: 'b', make: () => ({ type: 'code', code: '' }) },
 ];

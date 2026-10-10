@@ -22,6 +22,16 @@ test('不动就不变：id、tcy、旁注类型、引文竖排、图片布局都
   assert.equal(back.title, '标题');
 });
 
+test('新插入的图片默认与正文同宽；已有的图片（含没写版式的）不变', () => {
+  const d = doc();
+  d.blocks.push({ id: 'b06', type: 'image', src: '../../assets/old.jpg', alt: '' });
+  const back = fromMarkdown(`${toMarkdown(d)}\n\n![](new.jpg)\n`, d);
+  const img = (src) => back.blocks.find((b) => b.src === `../../assets/${src}`);
+  assert.equal(img('new.jpg').layout, 'inline');
+  assert.equal(img('old.jpg').layout, undefined);
+  assert.equal(img('a.jpg').layout, 'inline');
+});
+
 test('图片路径在文本里只有文件名', () => assert.match(toMarkdown(doc()), /!\[图\]\(a\.jpg\)/));
 
 test('改几个字的段落沿用 id；新插入的段落取新 id；删掉的块消失', () => {
