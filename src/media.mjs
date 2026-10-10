@@ -8,6 +8,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync, copyFileSync } from '
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
+import sharp from 'sharp';
 
 const run = promisify(execFile);
 export const HEIC_EXT = new Set(['.heic', '.heif']);
@@ -23,10 +24,21 @@ export function heicToJpeg(buffer) {
   return scratch(async (dir) => {
     writeFileSync(join(dir, 'in.heic'), buffer);
     try {
-      await run('sips', ['-s', 'format', 'jpeg', '-s', 'formatOptions', '90', join(dir, 'in.heic'), '--out', join(dir, 'out.jpg')]);
+      // 先存最高质量，转正时（uprightJpeg）再压一次
+      await run('sips', ['-s', 'format', 'jpeg', '-s', 'formatOptions', '100', join(dir, 'in.heic'), '--out', join(dir, 'out.jpg')]);
     } catch { throw new Error('HEIC 转换失败'); }
-    return readFileSync(join(dir, 'out.jpg'));
+    return uprightJpeg(readFileSync(join(dir, 'out.jpg')), true);
   });
+}
+
+/**
+ * 带 EXIF 方向标记的 JPEG（手机竖拍、HEIC 转出来的）把像素转正、标记改回正常，别的 EXIF（时间、定位）保留。
+ * 不转的话，不看方向标记的地方（Studio 的缩略图、排版里量的宽高）图是躺倒的。force：没有方向标记也重新压缩
+ */
+export async function uprightJpeg(buffer, force = false) {
+  const { format, orientation = 1 } = await sharp(buffer).metadata();
+  if (format !== 'jpeg' || (orientation === 1 && !force)) return buffer;
+  return sharp(buffer).rotate().withMetadata({ orientation: 1 }).jpeg({ quality: 90, mozjpeg: true }).toBuffer();
 }
 
 /**

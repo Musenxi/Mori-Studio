@@ -16,7 +16,7 @@ import { locate } from 'astro-mori/anchor';
 import { normalizeDoc } from 'astro-mori/flow';
 import { probeSite } from './probe.mjs';
 import { gitInfo, gitInit, publishGit, publishLocal } from './publish.mjs';
-import { HEIC_EXT, heicToJpeg, toWebMp4 } from './media.mjs';
+import { HEIC_EXT, heicToJpeg, uprightJpeg, toWebMp4 } from './media.mjs';
 import { parseGpx, simplify, readExif, clusterStops } from './geo.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -188,7 +188,7 @@ export async function startStudio({ root, port = 4400, dev = false }) {
           const w = +url.searchParams.get('w');
           if (w && extname(f).toLowerCase() !== '.svg' && existsSync(f)) {
             res.writeHead(200, { 'Content-Type': 'image/webp', 'Cache-Control': 'no-store' });
-            return res.end(await sharp(f).resize({ width: Math.min(w, 2400), withoutEnlargement: true }).webp({ quality: 78 }).toBuffer());
+            return res.end(await sharp(f).rotate().resize({ width: Math.min(w, 2400), withoutEnlargement: true }).webp({ quality: 78 }).toBuffer());
           }
           return serveFile(res, f);
         }
@@ -391,7 +391,7 @@ export async function startStudio({ root, port = 4400, dev = false }) {
         const list = assetUsage(root);
         for (const a of list) {
           if (a.name.toLowerCase().endsWith('.svg')) continue;
-          try { const m = await sharp(join(root, 'src/assets', a.name)).metadata(); a.width = m.width; a.height = m.height; } catch { /* 读不出尺寸就不显示 */ }
+          try { const m = await sharp(join(root, 'src/assets', a.name)).metadata(); a.width = m.autoOrient?.width ?? m.width; a.height = m.autoOrient?.height ?? m.height; } catch { /* 读不出尺寸就不显示 */ }
         }
         return send(res, 200, { assets: list.sort((a, b) => b.mtime - a.mtime) });
       }
@@ -415,6 +415,7 @@ export async function startStudio({ root, port = 4400, dev = false }) {
           try { body = await heicToJpeg(body); } catch (e) { return send(res, 400, { error: e.message }); }
           name = `${name.slice(0, -ext.length)}.jpg`;
         } else if (!IMAGE_EXT.has(ext)) return send(res, 400, { error: '只接受图片文件' });
+        else try { body = await uprightJpeg(body); } catch { /* 读不了的图原样存，构建时再报 */ }
         const saved = saveAsset(root, name, body);
         return send(res, 200, { ok: true, name: saved });
       }
