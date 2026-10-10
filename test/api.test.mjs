@@ -61,11 +61,11 @@ test('页面：新建、保留名被拒、出现在项目信息里', async () =>
 });
 
 test('友人帐：保存整理后读回；坏网址 400', async () => {
-  const r = await call('PUT', '/api/friends', { friends: [{ name: 'A', url: 'https://a.io' }, { name: 'B', url: 'http://b.org/x' }] });
+  const r = await call('PUT', '/api/friends', { text: '[A](https://a.io)\n[B](http://b.org/x)', lost: '' });
   assert.equal(r.status, 200);
   assert.deepEqual(r.body.friends.map((f) => [f.id, f.order]), [['a', 0], ['b', 1]]);
   assert.equal((await call('GET', '/api/friends')).body.friends.length, 2);
-  assert.equal((await call('PUT', '/api/friends', { friends: [{ name: 'X', url: 'nope' }] })).status, 400);
+  assert.equal((await call('PUT', '/api/friends', { text: '[X](nope)', lost: '' })).status, 400);
   assert.equal((await call('POST', '/api/friends/probe', { url: 'http://127.0.0.1:1/' })).status, 400); // 内网地址被拒
 });
 

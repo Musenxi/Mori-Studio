@@ -53,6 +53,7 @@
     "@types/react-dom": "^19.3.0",
     "@typescript-eslint/parser": "^8.71.0",
     "@vitejs/plugin-react": "^6.1.1",
+    "astro-mori": "github:Musenxi/Astro-Theme-Mori",
     "eslint": "^10.11.0",
     "eslint-plugin-react-hooks": "^7.1.1",
     "tailwindcss": "^4.3.3",
