@@ -23,7 +23,8 @@ const MIN_NODE: (u32, u32) = (22, 12);
 const RECENT_MAX: usize = 10;
 /// 第一次打开某个项目要构建界面，给足时间
 const START_TIMEOUT: Duration = Duration::from_secs(180);
-const LAUNCHER: &str = "tauri://localhost/index.html";
+/// 启动页的地址：Windows 上 Tauri 用 http://tauri.localhost，别的系统用 tauri://localhost
+const LAUNCHER: &str = if cfg!(windows) { "http://tauri.localhost/index.html" } else { "tauri://localhost/index.html" };
 
 type Log = Arc<Mutex<VecDeque<String>>>;
 
@@ -47,9 +48,19 @@ fn stop(studio: &Studio) {
     }
 }
 
+/// Windows 上从图形界面程序拉起命令行程序，默认会弹出一个黑色的控制台窗口；不要它
+fn quiet(cmd: &mut Command) -> &mut Command {
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
+    }
+    cmd
+}
+
 /// 跑一条命令，最多等 secs 秒，超时就杀掉
 fn output_within(cmd: &mut Command, secs: u64) -> Option<String> {
-    let mut c = cmd.stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::null()).spawn().ok()?;
+    let mut c = quiet(cmd).stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::null()).spawn().ok()?;
     let mut out = c.stdout.take()?;
     let reader = thread::spawn(move || {
         let mut s = String::new();
@@ -70,8 +81,9 @@ fn output_within(cmd: &mut Command, secs: u64) -> Option<String> {
     }
 }
 
-/// 找 Node 和 PATH：从图形界面启动的程序拿不到终端里设的 PATH（nvm、Homebrew），所以去登录 shell 里问
-fn node_env() -> Result<NodeEnv, String> {
+/// PATH 和 node 在哪。macOS / Linux：从图形界面启动的程序拿不到终端里设的 PATH（nvm、Homebrew），所以去登录 shell 里问
+#[cfg(not(windows))]
+fn locate_node() -> (String, String) {
     let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".into());
     let probe = r#"printf '\n__MORI__%s\n%s\n' "$PATH" "$(command -v node)""#;
     let text = output_within(Command::new(&shell).args(["-ilc", probe]), 8)
@@ -82,11 +94,25 @@ fn node_env() -> Result<NodeEnv, String> {
     if path.is_empty() {
         path = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin".into();
     }
-    let found = lines.next().unwrap_or("").trim().to_string();
+    (path, lines.next().unwrap_or("").trim().to_string())
+}
+
+/// Windows：图形界面程序本来就带着用户的 PATH，用 where 找 node
+#[cfg(windows)]
+fn locate_node() -> (String, String) {
+    let path = std::env::var("PATH").unwrap_or_default();
+    let found = output_within(Command::new("where.exe").arg("node"), 8).unwrap_or_default();
+    (path, found.lines().next().unwrap_or("").trim().to_string())
+}
+
+const NODE_FALLBACK: &[&str] = if cfg!(windows) { &[r"C:\Program Files\nodejs\node.exe"] } else { &["/opt/homebrew/bin/node", "/usr/local/bin/node"] };
+
+fn node_env() -> Result<NodeEnv, String> {
+    let (path, found) = locate_node();
     let node = match std::env::var("MORI_NODE") {
         Ok(n) => PathBuf::from(n),
         Err(_) if !found.is_empty() => PathBuf::from(found),
-        Err(_) => ["/opt/homebrew/bin/node", "/usr/local/bin/node"]
+        Err(_) => NODE_FALLBACK
             .iter()
             .map(PathBuf::from)
             .find(|p| p.exists())
@@ -227,7 +253,7 @@ async fn open_project(app: AppHandle, path: String) -> Result<(), String> {
     let port = free_port()?;
     // 界面按项目构建（项目里的主题模块会打包进去），每个项目一份，放在应用缓存里
     let ui = app.path().app_cache_dir().map_err(|e| e.to_string())?.join("ui").join(hash(&path));
-    let mut child = Command::new(&env.node)
+    let mut child = quiet(&mut Command::new(&env.node))
         .arg(studio_dir(&app).join("bin/mori-studio.mjs"))
         .args(["--root", &path, "--port", &port.to_string()])
         .env("PATH", &env.path)
@@ -268,7 +294,7 @@ async fn open_project(app: AppHandle, path: String) -> Result<(), String> {
     Ok(())
 }
 
-/// 应用图标：四种底色，菜单里切换，记在应用设置里；打包进去的 icns 是默认的深墨蓝（应用没开时 Dock、访达显示它）
+/// 应用图标：四种底色，菜单里切换，记在应用设置里；打包进去的图标是默认的深墨蓝（应用没开时 Dock、访达、开始菜单显示它）
 const ICONS: [(&str, &str, &[u8]); 4] = [
     ("navy", "深墨蓝", include_bytes!("../app-icons/navy.png")),
     ("blue", "克莱因蓝", include_bytes!("../app-icons/blue.png")),
@@ -303,7 +329,7 @@ fn save_icon(app: &AppHandle, id: &str) {
 
 /// 换 Dock 上的图标（只在应用开着时有效；要在主线程调用）
 #[cfg(target_os = "macos")]
-fn set_dock_icon(id: &str) {
+fn set_app_icon(_app: &AppHandle, id: &str) {
     use objc2::AllocAnyThread;
     use objc2::MainThreadMarker;
     use objc2_app_kit::{NSApplication, NSImage};
@@ -314,8 +340,14 @@ fn set_dock_icon(id: &str) {
         unsafe { NSApplication::sharedApplication(mtm).setApplicationIconImage(Some(&img)) };
     }
 }
+/// 别的系统：换窗口和任务栏上的图标
 #[cfg(not(target_os = "macos"))]
-fn set_dock_icon(_id: &str) {}
+fn set_app_icon(app: &AppHandle, id: &str) {
+    let (Some(w), Some((_, _, png))) = (app.get_webview_window("main"), ICONS.iter().find(|(i, _, _)| *i == id)) else { return };
+    if let Ok(img) = tauri::image::Image::from_bytes(png) {
+        let _ = w.set_icon(img);
+    }
+}
 
 /// 回到启动页（菜单“打开项目…”）
 fn back_to_launcher(app: &AppHandle) {
@@ -378,7 +410,7 @@ fn main() {
             }
             app.manage(IconMenu(ICONS.iter().map(|(id, _, _)| *id).zip(checks).collect()));
             app.set_menu(menu)?;
-            set_dock_icon(&icon);
+            set_app_icon(h, &icon);
             if !cfg!(debug_assertions) {
                 check_update(h.clone());
             }
@@ -399,7 +431,7 @@ fn main() {
                 back_to_launcher(app);
             } else if let Some(icon) = id.strip_prefix("icon:") {
                 save_icon(app, icon);
-                set_dock_icon(icon);
+                set_app_icon(app, icon);
                 // 只勾选中的那个（点已勾选的那项也保持勾选）
                 for (other, item) in &app.state::<IconMenu>().0 {
                     let _ = item.set_checked(*other == icon);

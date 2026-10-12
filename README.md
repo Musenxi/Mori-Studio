@@ -32,13 +32,15 @@ node bin/mori-studio.mjs mcp --root 博客项目目录
 
 ### 安装
 
-在 [Releases](https://github.com/Musenxi/Mori-Studio/releases) 下载 `.dmg`（Apple 芯片选 `aarch64`，Intel 选 `x64`），把 Mori Studio 拖进“应用程序”。要先装 Node.js 22.12 或更新。
+在 [Releases](https://github.com/Musenxi/Mori-Studio/releases) 下载。macOS 下载 `.dmg`（Apple 芯片选 `aarch64`，Intel 选 `x64`），把 Mori Studio 拖进“应用程序”。要先装 Node.js 22.12 或更新。
 
 应用没有 Apple 签名，第一次打开前在终端运行一次（不然会提示“已损坏”或“无法验证开发者”）：
 
 ```bash
 xattr -cr "/Applications/Mori Studio.app"
 ```
+
+Windows 下载 `-setup.exe` 安装。安装包同样没有签名，如果提示“Windows 已保护你的电脑”，点“更多信息 → 仍要运行”。Windows 上管理令牌、图床密钥还存在项目的 `.mori-studio.json` 里（不进 git），导入 HEIC 和实况照片要先装 ffmpeg 或者先转成 JPEG。
 
 之后有新版本时，打开应用会提示更新。
 
@@ -58,7 +60,7 @@ pnpm desktop:build    # 本机打包（.app、.dmg）
 
 ### 发布
 
-GitHub Actions（`.github/workflows/release.yml`）在推 `v*` 标签时分别打 Apple 芯片和 Intel 两个包，连同更新包传到 Release 草稿。
+GitHub Actions（`.github/workflows/release.yml`）在推 `v*` 标签时分别打 Apple 芯片、Intel 和 Windows 三个包，连同更新包传到 Release 草稿。在 Actions 里手动运行它只打包、不建 Release，安装包在那次运行的 Artifacts 里。
 
 1. 改 `package.json` 的 `version`（桌面版的版本号就用它），提交。
 2. `git tag v0.1.0 && git push origin main --tags`

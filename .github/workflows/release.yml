@@ -1,4 +1,5 @@
-# 推 v* 标签时打包桌面版，传到 GitHub Release 草稿（检查后手动发布，已装的应用才会收到更新）
+# 推 v* 标签时打包桌面版（macOS 两种芯片 + Windows），传到 GitHub Release 草稿（检查后手动发布，已装的应用才会收到更新）
+# 手动运行（workflow_dispatch）只打包，不建 Release，安装包在这次运行的 Artifacts 里
 # 要先在仓库的 Secrets 里放 TAURI_SIGNING_PRIVATE_KEY（更新包的签名私钥），见 README“发布桌面版”
 name: 发布桌面版
 
@@ -20,11 +21,13 @@ jobs:
             target: aarch64-apple-darwin
           - runner: macos-15-intel  # Intel；sharp 的原生模块要在对应架构上装，所以分开打
             target: x86_64-apple-darwin
+          - runner: windows-latest
+            target: x86_64-pc-windows-msvc
     runs-on: ${{ matrix.runner }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: pnpm
@@ -33,19 +36,21 @@ jobs:
         with:
           workspaces: desktop/src-tauri
       - run: pnpm install --frozen-lockfile
-      - uses: tauri-apps/tauri-action@v0
+      - uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ''
         with:
           projectPath: desktop
-          tauriScript: ${{ github.workspace }}/node_modules/.bin/tauri
-          tagName: ${{ github.ref_name }}
+          # 从 desktop/ 里直接用 node 跑 CLI：打包前的 stage-studio 按当前目录找，Windows 上也不用找 .cmd
+          tauriScript: node ../node_modules/@tauri-apps/cli/tauri.js
+          tagName: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
           releaseName: Mori Studio ${{ github.ref_name }}
           releaseBody: |
             需要本机装有 Node.js 22.12 或更新。
-            应用没有 Apple 签名，第一次打开前在终端运行：
-            xattr -cr "/Applications/Mori Studio.app"
+            macOS：应用没有 Apple 签名，第一次打开前在终端运行 xattr -cr "/Applications/Mori Studio.app"
+            Windows：安装时如果提示“Windows 已保护你的电脑”，点“更多信息 → 仍要运行”。
           releaseDraft: true
+          uploadWorkflowArtifacts: ${{ github.ref_type != 'tag' }}
           args: --target ${{ matrix.target }}

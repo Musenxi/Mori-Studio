@@ -14,5 +14,6 @@ rmSync(out, { recursive: true, force: true });
 mkdirSync(out, { recursive: true });
 writeFileSync(out + '.gitkeep', ''); // 开发时编译也要求这个目录存在
 for (const f of ['bin', 'src', 'app', 'package.json', 'pnpm-lock.yaml', 'LICENSE']) cpSync(repo + f, out + f, { recursive: true });
-execFileSync('pnpm', ['install', '--prod', '--frozen-lockfile', '--config.node-linker=hoisted'], { cwd: out, stdio: 'inherit' });
+// Windows 上 pnpm 是 pnpm.cmd，要经过 shell 才能找到
+execFileSync('pnpm', ['install', '--prod', '--frozen-lockfile', '--config.node-linker=hoisted'], { cwd: out, stdio: 'inherit', shell: process.platform === 'win32' });
 console.log(`Studio 已放进 ${out}`);

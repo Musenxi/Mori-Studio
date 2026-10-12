@@ -4,7 +4,7 @@
  */
 import { createServer } from 'node:http';
 import { createReadStream, existsSync, statSync, readFileSync, writeFileSync, utimesSync, mkdirSync, rmSync, realpathSync } from 'node:fs';
-import { join, extname, normalize, resolve, dirname, basename } from 'node:path';
+import { join, extname, normalize, resolve, dirname, basename, sep, delimiter } from 'node:path';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
@@ -38,9 +38,9 @@ const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; cha
  * 优先用 PATH 里指向同一个程序的那个（/opt/homebrew/bin/node 这种）
  */
 function stableNode() {
-  const real = realpathSync(process.execPath);
-  for (const dir of (process.env.PATH ?? '').split(':')) {
-    try { if (dir && realpathSync(join(dir, 'node')) === real) return join(dir, 'node'); } catch { /* 这个目录里没有 */ }
+  const real = realpathSync(process.execPath), exe = process.platform === 'win32' ? 'node.exe' : 'node';
+  for (const dir of (process.env.PATH ?? '').split(delimiter)) {
+    try { if (dir && realpathSync(join(dir, exe)) === real) return join(dir, exe); } catch { /* 这个目录里没有 */ }
   }
   return process.execPath;
 }
@@ -127,7 +127,7 @@ export async function startStudio({ root, port = 4400, dev = false }) {
     if (!siteIcons || !icon) return null;
     if (siteIcons.isPresetIcon(icon)) return fileURLToPath(siteIcons.presetIconUrl(icon));
     const pub = join(root, 'public'), f = normalize(join(pub, String(icon)));
-    return f.startsWith(pub + '/') && existsSync(f) ? f : null;
+    return f.startsWith(pub + sep) && existsSync(f) ? f : null;
   }
 
   /**
@@ -337,7 +337,7 @@ export async function startStudio({ root, port = 4400, dev = false }) {
       if (p === '/api/trash/file' && req.method === 'GET') {
         // 回收站里图片的缩略图（只给图片，不出回收站目录）
         const dir = join(root, '.mori-trash'), f = normalize(join(root, url.searchParams.get('path') ?? ''));
-        if (!f.startsWith(dir + '/') || !IMAGE_EXT.has(extname(f).toLowerCase()) || !existsSync(f)) return send(res, 404, { error: 'not found' });
+        if (!f.startsWith(dir + sep) || !IMAGE_EXT.has(extname(f).toLowerCase()) || !existsSync(f)) return send(res, 404, { error: 'not found' });
         if (extname(f).toLowerCase() === '.svg') return serveFile(res, f);
         res.writeHead(200, { 'Content-Type': 'image/webp', 'Cache-Control': 'no-store' });
         return res.end(await sharp(f).rotate().resize({ width: 160, withoutEnlargement: true }).webp({ quality: 70 }).toBuffer());
