@@ -5,7 +5,7 @@
  * 外链 = base + "/" + src（{w} 换成宽度）。文件名里带内容哈希：图改了外链就变，CDN 不会给旧图。
  * 没设图床，或某张图还没上传，主题照旧用本地的图。
  *
- * 图床设置存在项目的 .mori-studio.json（不进 git）：密钥只存这里，界面上只进不出。
+ * 图床设置存在项目的 .mori-studio.json（不进 git），Secret Key 在钥匙串里（见 secrets.mjs）；界面上只进不出。
  */
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';

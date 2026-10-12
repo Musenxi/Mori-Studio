@@ -21,6 +21,7 @@ import { hostReady, pendingAssets, syncToHost, testHost } from './cdn.mjs';
 import { listAssets, saveAsset, liveVideo, assetUsage, trashAsset, moveAssets, mergeAssets, indexAssets, rememberOrigin, findSame, similarGroups, sha256, cleanRel, SHARED } from './library.mjs';
 import { parseGpx, simplify, readExif, clusterStops } from './geo.mjs';
 import { commentsClient } from './comments.mjs';
+import { keychain, commentsAccount, imageHostAccount } from './secrets.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const dist = join(here, '../dist'); // 界面：app/ 用 Vite 构建出来的静态文件
@@ -135,23 +136,50 @@ export async function startStudio({ root, port = 4400, dev = false }) {
     return '\n预览服务没有在 30 秒内恢复，请手动重启 astro dev。\n';
   }
 
-  // ── 评论管理：Studio 服务替浏览器去调评论服务的管理接口，管理令牌只存在本机（环境变量或项目里的 .mori-studio.json） ──
+  // ── 本机状态（项目里的 .mori-studio.json，不进 git）；密钥在钥匙串里（见 secrets.mjs），没有钥匙串的系统才存这个文件 ──
   const tokenFile = join(root, '.mori-studio.json');
-  const adminToken = () => process.env.MORI_ADMIN_TOKEN || (existsSync(tokenFile) ? JSON.parse(readFileSync(tokenFile, 'utf8')).adminToken : '');
+  const readState = () => (existsSync(tokenFile) ? JSON.parse(readFileSync(tokenFile, 'utf8')) : {});
+  const replaceState = (st) => writeFileSync(tokenFile, JSON.stringify(st) + '\n', { mode: 0o600 });
+  const writeState = (patch) => replaceState({ ...readState(), ...patch });
+  const keys = keychain();
+
+  // ── 评论管理：Studio 服务替浏览器去调评论服务的管理接口，管理令牌不交给界面 ──
   const commentsEndpoint = () => (config.comments?.provider === 'mori' ? String(config.comments.endpoint ?? '').replace(/\/$/, '') : '');
+  function adminToken() {
+    if (process.env.MORI_ADMIN_TOKEN) return process.env.MORI_ADMIN_TOKEN;
+    const ep = commentsEndpoint(), st = readState();
+    if (!keys || !ep) return st.adminToken ?? '';
+    // 以前存在 .mori-studio.json 里的令牌，搬进钥匙串
+    if (st.adminToken) { keys.set(commentsAccount(ep), st.adminToken); const { adminToken: _moved, ...rest } = st; replaceState(rest); }
+    return keys.get(commentsAccount(ep));
+  }
   const comments = commentsClient({ endpoint: commentsEndpoint, token: adminToken });
 
   // 评论数字：总数来自评论服务的 /stats；“未读”= 比上次打开评论页更晚的评论（上次时间存在 .mori-studio.json）
-  const readState = () => (existsSync(tokenFile) ? JSON.parse(readFileSync(tokenFile, 'utf8')) : {});
-  const writeState = (patch) => writeFileSync(tokenFile, JSON.stringify({ ...readState(), ...patch }) + '\n', { mode: 0o600 });
   async function commentNumbers() {
     if (!commentsEndpoint() || !adminToken()) return null;
     try { return await comments.numbers(readState().commentsSeenAt ?? 0); } catch { return null; }
   }
 
-  // 图床：设置存在 .mori-studio.json 的 imageHost（密钥只进不出）
+  // 图床：设置存在 .mori-studio.json 的 imageHost，Secret Key 在钥匙串里（只进不出）
   const HOST_KEYS = ['provider', 'endpoint', 'region', 'bucket', 'accessKeyId', 'secretAccessKey', 'prefix', 'publicBase', 'pathStyle'];
-  const imageHost = () => readState().imageHost ?? null;
+  function imageHost() {
+    const h = readState().imageHost;
+    if (!h || !keys) return h ?? null;
+    const { secretAccessKey: old, ...rest } = h;
+    if (old) { keys.set(imageHostAccount(rest), old); writeState({ imageHost: rest }); } // 以前存在文件里的，搬进钥匙串
+    const secret = keys.get(imageHostAccount(rest));
+    return secret ? { ...rest, secretAccessKey: secret } : rest;
+  }
+  function saveImageHost(next) {
+    const prev = imageHost();
+    if (!keys) return next ? writeState({ imageHost: next }) : replaceState((({ imageHost: _drop, ...st }) => st)(readState()));
+    if (prev && (!next || imageHostAccount(prev) !== imageHostAccount(next))) keys.remove(imageHostAccount(prev));
+    if (!next) return replaceState((({ imageHost: _drop, ...st }) => st)(readState()));
+    const { secretAccessKey, ...rest } = next;
+    keys.set(imageHostAccount(rest), secretAccessKey ?? '');
+    writeState({ imageHost: rest });
+  }
   /** 构建前同步图床：没设置就跳过；失败只提示，不拦构建（没上传的图照旧用本地的） */
   async function syncBeforeBuild(write) {
     const host = imageHost();
@@ -309,7 +337,8 @@ export async function startStudio({ root, port = 4400, dev = false }) {
           if (mm[1] === 'seen' && req.method === 'POST') { writeState({ commentsSeenAt: Date.now() }); return send(res, 200, { ok: true }); }
           if (mm[1] === 'token' && req.method === 'PUT') {
             const { token } = await readJson(req);
-            writeState({ adminToken: String(token ?? '').trim() });
+            const t = String(token ?? '').trim(), ep = commentsEndpoint();
+            if (keys && ep) keys.set(commentsAccount(ep), t); else writeState({ adminToken: t });
             return send(res, 200, { ok: true });
           }
           if (mm[2] && req.method === 'PATCH') return send(res, 200, await comments.setStatus(mm[2], (await readJson(req)).status));
@@ -454,12 +483,12 @@ export async function startStudio({ root, port = 4400, dev = false }) {
       if (req.method === 'PUT' && p === '/api/image-host') {
         try {
           const b = await readJson(req);
-          if (b === null || b.host === null) { const { imageHost: _drop, ...st } = readState(); writeFileSync(tokenFile, JSON.stringify(st) + '\n', { mode: 0o600 }); return send(res, 200, { ok: true }); }
+          if (b === null || b.host === null) { saveImageHost(null); return send(res, 200, { ok: true }); }
           const next = Object.fromEntries(HOST_KEYS.map((k) => [k, typeof b[k] === 'string' ? b[k].trim() : b[k]]).filter(([, v]) => v !== undefined && v !== ''));
           if (!next.secretAccessKey && imageHost()?.secretAccessKey) next.secretAccessKey = imageHost().secretAccessKey; // 留空 = 不改
           for (const k of ['endpoint', 'publicBase']) if (next[k] && !/^https?:\/\/[^\s/]+/.test(next[k])) return send(res, 400, { error: `${k === 'endpoint' ? '接口地址' : '访问域名'}要以 http:// 或 https:// 开头` });
           next.pathStyle = !!b.pathStyle;
-          writeState({ imageHost: next });
+          saveImageHost(next);
           return send(res, 200, { ok: true });
         } catch (e) { return send(res, 400, { error: e.message }); }
       }

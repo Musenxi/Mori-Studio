@@ -6,3 +6,5 @@ import { useTheme } from '../src/theme.mjs';
 // 用真实路径：pnpm 的 node_modules/astro-mori 是符号链接，主题自己的依赖装在真实目录旁边
 process.env.MORI_THEME ??= realpathSync(fileURLToPath(new URL('../node_modules/astro-mori', import.meta.url)));
 useTheme(process.env.MORI_THEME);
+// 测试不碰本机钥匙串，密钥照旧写在临时项目的 .mori-studio.json 里
+process.env.MORI_STUDIO_KEYCHAIN = '0';

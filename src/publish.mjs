@@ -13,7 +13,7 @@ import { homedir } from 'node:os';
 const exec = promisify(execFile);
 /**
  * git 只提交这些路径：内容、图片、站点配置，以及让 Actions / Pages 能构建站点的项目文件。
- * 不会碰 .mori-studio.json（里面有管理令牌）、.mori-trash/、dist/ 或 node_modules/。
+ * 不会碰 .mori-studio.json（本机状态，可能有密钥）、.mori-trash/、dist/ 或 node_modules/。
  */
 export const CONTENT_PATHS = [
   'src', 'public', 'mori.config.ts', 'mori.config.mjs', 'mori.config.js',
