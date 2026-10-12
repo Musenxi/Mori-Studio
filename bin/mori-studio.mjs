@@ -29,7 +29,9 @@ async function ensureUi(root) {
   console.log('正在构建界面（第一次运行、换了项目、或界面有更新时才需要，几秒钟）……');
   process.env.MORI_ROOT = root;
   const { build } = await import('vite');
+  const env = process.env.NODE_ENV; // vite build 会把整个进程的 NODE_ENV 设成 production，预览用的 Astro 也在这个进程里
   await build({ configFile: join(here, '../app/vite.config.ts'), logLevel: 'warn' });
+  if (env === undefined) delete process.env.NODE_ENV; else process.env.NODE_ENV = env;
   writeFileSync(stamp, root);
 }
 

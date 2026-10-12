@@ -51,7 +51,7 @@ export interface Project {
   entries: EntrySummary[];
   pages: PageSummary[];
   assets: string[];
-  preview: { port: number; url: string | null };
+  preview: { url: string | null };
   publish: PublishConfig | null;
   comments: { provider: string | null; /** 头像地址模板，{hash} 换成评论的头像哈希；空 = 不显示 */ avatar: string; endpoint: string; hasToken: boolean; pending: number };
 }

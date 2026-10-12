@@ -22,6 +22,7 @@ import { listAssets, saveAsset, liveVideo, assetUsage, trashAsset, moveAssets, m
 import { parseGpx, simplify, readExif, clusterStops } from './geo.mjs';
 import { commentsClient } from './comments.mjs';
 import { keychain, commentsAccount, imageHostAccount } from './secrets.mjs';
+import { previewer } from './preview.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const dist = process.env.MORI_STUDIO_DIST ?? join(here, '../dist'); // 界面：app/ 用 Vite 构建出来的静态文件（桌面版放在应用缓存里）
@@ -95,21 +96,13 @@ export async function startStudio({ root, port = 4400, dev = false }) {
   root = resolve(root);
   const { path: configPath, config: first } = await loadConfig(root);
   let config = first; // 改了 mori.config.ts 之后重新读
-  const preview = { port: 4321, startedByStudio: false }; // Astro 默认端口；项目已经在跑 dev（有锁，只能有一个）就直接复用
+  const preview = previewer(root); // 预览渲染器，见 preview.mjs
   const astroBin = () => join(dirname(require.resolve('astro/package.json', { paths: [root] })), 'bin/astro.mjs');
-  const runAstro = (args, opts = {}) => spawn(process.execPath, [astroBin(), ...args], { cwd: root, ...opts });
+  // 子进程（astro build、发布命令）不继承 Studio 进程的 NODE_ENV（预览渲染器把它设成了 development），让它们自己定
+  const childEnv = (env = process.env) => { const { NODE_ENV: _drop, ...rest } = env; return rest; };
+  const runAstro = (args, opts = {}) => spawn(process.execPath, [astroBin(), ...args], { cwd: root, ...opts, env: childEnv(opts.env) });
 
-  /**
-   * 预览服务在哪个地址上。`astro dev` 默认绑 localhost，在有的机器上只监听 IPv6（[::1]），
-   * 所以三种写法都试一遍，返回第一个连得上的（连不上是 null）。
-   */
-  async function previewUrl(p) {
-    for (const host of ['127.0.0.1', '[::1]', 'localhost']) {
-      try { if ((await fetch(`http://${host}:${p}/`, { signal: AbortSignal.timeout(1500) })).ok) return `http://${host}:${p}`; } catch { /* 换下一个 */ }
-    }
-    return null;
-  }
-  const isUp = async (p) => !!(await previewUrl(p));
+  const isUp = async () => !!(await preview.url());
 
   /**
    * 构建会动到 astro dev 也在用的缓存，预览可能因此出错。构建完如果预览服务开着，就让它重启。
@@ -128,7 +121,7 @@ export async function startStudio({ root, port = 4400, dev = false }) {
     let fast = 0;
     for (let i = 0; i < 116; i++) {
       const t = Date.now();
-      const ok = await isUp(preview.port);
+      const ok = await isUp();
       fast = ok && Date.now() - t < 400 ? fast + 1 : 0;
       if (fast >= 2) return '\n▸ 预览服务已重启\n';
       await new Promise((r) => setTimeout(r, 250));
@@ -231,7 +224,7 @@ export async function startStudio({ root, port = 4400, dev = false }) {
         const pending = cn?.unread ?? 0;
         return send(res, 200, {
           root, configPath, config: { title: config.title ?? 'Mori', description: config.description ?? '', accent: config.accent ?? '#002fa7', accentDark: config.accentDark, categories: config.categories ?? [], home: config.home, archive: config.archive, feed: config.feed, comments: config.comments?.provider === 'mori' ? { avatar: config.comments.avatar, status: config.comments.status ?? 'on' } : undefined, nav: config.nav ?? null, actions: config.actions ?? null, actionsLayout: config.actionsLayout === 'split' ? 'split' : 'merged', lang: config.lang ?? 'zh-CN', head: typeof config.head === 'string' ? config.head : '', author: config.author ?? {}, site: typeof config.site === 'string' ? config.site : '' },
-          entries: listEntries(root), pages: listPages(root), assets: listAssets(root), dev, preview: { port: preview.port, url: await previewUrl(preview.port) }, publish: config.publish ?? null, comments: { provider: config.comments?.provider ?? null, avatar: avatarTemplate(config.comments?.avatar), endpoint: commentsEndpoint(), hasToken: !!adminToken(), pending },
+          entries: listEntries(root), pages: listPages(root), assets: listAssets(root), dev, preview: { url: await preview.url() }, publish: config.publish ?? null, comments: { provider: config.comments?.provider ?? null, avatar: avatarTemplate(config.comments?.avatar), endpoint: commentsEndpoint(), hasToken: !!adminToken(), pending },
         });
       }
 
@@ -248,7 +241,7 @@ export async function startStudio({ root, port = 4400, dev = false }) {
       /* ── 分类：整个数组重写；改 id 时用到它的文章一起改 ── */
       if (req.method === 'PUT' && p === '/api/categories') {
         const { categories, renames = {} } = await readJson(req);
-        const wasUp = await isUp(preview.port);
+        const wasUp = await isUp();
         setCategories(configPath, categories);
         let moved = 0;
         for (const [from, to] of Object.entries(renames)) if (from !== to) moved += renameCategoryInEntries(root, from, to);
@@ -283,7 +276,7 @@ export async function startStudio({ root, port = 4400, dev = false }) {
 
       /* ── 页头入口：nav 为 null 是恢复默认（内置入口 + 所有页面） ── */
       if (p === '/api/nav' && req.method === 'PUT') {
-        const wasUp = await isUp(preview.port);
+        const wasUp = await isUp();
         try {
           const body = await readJson(req);
           if ('nav' in body) setNav(configPath, body.nav ?? null);
@@ -304,7 +297,7 @@ export async function startStudio({ root, port = 4400, dev = false }) {
       /* ── 站点设置：改 mori.config.ts 里的单行字符串 ── */
       if (req.method === 'PUT' && p === '/api/config') {
         const { key, value } = await readJson(req);
-        const wasUp = await isUp(preview.port);
+        const wasUp = await isUp();
         try {
           if (key === 'head') setHead(configPath, value); else setConfigValue(configPath, key, value);
         } catch (e) { return send(res, 400, { error: e.message }); }
@@ -500,19 +493,12 @@ export async function startStudio({ root, port = 4400, dev = false }) {
         try { const n = await syncToHost(root, imageHost(), (t) => res.write(t)); return res.end(`${n ? `上传了 ${n} 张` : '没有要上传的'}\n[exit 0]\n`); } catch (e) { return res.end(`${e.message}\n[exit 1]\n`); }
       }
 
-      /* ── 预览：用项目自己的 astro dev（真实主题渲染） ── */
+      /* ── 预览：项目自己的 Astro 渲染（见 preview.mjs）。界面开着预览时会定期调 start，算“还在用” ── */
       if (req.method === 'POST' && p === '/api/preview/start') {
-        if (!(await isUp(preview.port))) {
-          runAstro(['dev', '--port', String(preview.port), '--host', '127.0.0.1'], { stdio: 'ignore', detached: true }).unref();
-          preview.startedByStudio = true;
-          for (let i = 0; i < 60 && !(await isUp(preview.port)); i++) await new Promise((r) => setTimeout(r, 500));
-        }
-        const url = await previewUrl(preview.port);
-        return send(res, 200, { port: preview.port, url, up: !!url });
+        try { return send(res, 200, { url: await preview.ensure() }); } catch (e) { return send(res, 500, { error: `预览没能启动：${e.message}` }); }
       }
       if (req.method === 'POST' && p === '/api/preview/stop') {
-        // 只停自己拉起的；用户自己开的 dev 服务器不动
-        if (preview.startedByStudio) { runAstro(['dev', 'stop'], { stdio: 'ignore' }); preview.startedByStudio = false; }
+        await preview.stop(); // 只停 Studio 自己起的
         return send(res, 200, { ok: true });
       }
 
@@ -524,7 +510,7 @@ export async function startStudio({ root, port = 4400, dev = false }) {
         if (target.error) return res.end(`${target.error}\n[exit 2]\n`);
         if (pub.target === 'local' && !dev) return res.end('“本地文件夹”只在开发模式下可用（用 pnpm dev:all 或 mori-studio --dev 启动）。\n[exit 2]\n');
         const pipe = (child, done) => { child.stdout.on('data', (d) => res.write(d)); child.stderr.on('data', (d) => res.write(d)); child.on('error', (e) => { res.write(`${e.message}\n`); done(127); }); child.on('close', done); };
-        const wasUp = await isUp(preview.port);
+        const wasUp = await isUp();
         const finish = async (text, code) => res.end(`${text}${await restartPreview(wasUp)}[exit ${code}]\n`);
         await syncBeforeBuild((t) => res.write(t));
         res.write('▸ 构建\n');
@@ -535,7 +521,7 @@ export async function startStudio({ root, port = 4400, dev = false }) {
             const c = pub.target === 'git' ? await publishGit(root, pub, (t) => res.write(t)) : publishLocal(root, pub.dest, (t) => res.write(t));
             return finish(`\n${c ? '发布失败' : '已发布'}\n`, c);
           }
-          pipe(spawn(target.cmd, target.args, { cwd: root, env: { ...process.env, FORCE_COLOR: '0' } }), (c) => finish(`\n${c ? '发布失败' : '已发布'}\n`, c));
+          pipe(spawn(target.cmd, target.args, { cwd: root, env: childEnv({ ...process.env, FORCE_COLOR: '0' }) }), (c) => finish(`\n${c ? '发布失败' : '已发布'}\n`, c));
         });
         return;
       }
@@ -543,7 +529,7 @@ export async function startStudio({ root, port = 4400, dev = false }) {
       /* ── 构建：输出一路推给界面 ── */
       if (req.method === 'POST' && p === '/api/build') {
         res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' });
-        const wasUp = await isUp(preview.port);
+        const wasUp = await isUp();
         await syncBeforeBuild((t) => res.write(t));
         const child = runAstro(['build'], { env: { ...process.env, FORCE_COLOR: '0' } });
         child.stdout.on('data', (d) => res.write(d));

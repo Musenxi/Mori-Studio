@@ -153,7 +153,7 @@ function Session({ routeKind, id, initial }: { routeKind: 'post' | 'page'; id: s
         )}
         {panel === 'preview' && project && (
           <aside className="mb-2 mr-2 w-[46%] min-w-96 shrink-0 animate-slide-in overflow-hidden rounded-2xl bg-muted/60">
-            <Preview base={project.preview.url} path={path} nonce={previewKey} onRefresh={() => setPreviewKey((k) => k + 1)} onStarted={() => void refresh()} />
+            <Preview path={path} nonce={previewKey} onRefresh={() => setPreviewKey((k) => k + 1)} onReady={refresh} />
           </aside>
         )}
       </div>
@@ -161,26 +161,23 @@ function Session({ routeKind, id, initial }: { routeKind: 'post' | 'page'; id: s
   );
 }
 
-function Preview({ base, path, nonce, onRefresh, onStarted }: { base: string | null; path: string; nonce: number; onRefresh: () => void; onStarted: () => void }) {
-  const [starting, setStarting] = useState(false);
-  const start = async () => {
-    setStarting(true);
-    try {
-      const r = await api.previewStart();
-      if (!r.up) toast.error('预览没能启动（等了 30 秒仍没有响应）。请确认项目已安装好依赖，然后再试。');
-      onStarted();
-    } catch (e) { toast.error((e as Error).message); }
-    setStarting(false);
-  };
-  if (!base) {
-    return (
-      <div className="grid h-full place-items-center px-8 text-center">
-        <div>
-          <Button variant="default" onClick={start} disabled={starting}>{starting ? '正在启动……' : '启动预览'}</Button>
-        </div>
-      </div>
+/** 打开就准备渲染器（第一次几秒）；开着的时候每两分钟告诉 Studio 还在用，闲置太久它会停掉渲染器 */
+function Preview({ path, nonce, onRefresh, onReady }: { path: string; nonce: number; onRefresh: () => void; onReady: () => void }) {
+  const [base, setBase] = useState<string | null>(null);
+  const [error, setError] = useState('');
+  const ready = useRef(onReady);
+  useEffect(() => { ready.current = onReady; }, [onReady]);
+  useEffect(() => {
+    let alive = true;
+    const ensure = () => api.previewStart().then(
+      (r) => { if (alive) { setBase(r.url); setError(''); } },
+      (e) => { if (alive) setError((e as Error).message); },
     );
-  }
+    void ensure().then(() => ready.current());
+    const t = setInterval(ensure, 120_000);
+    return () => { alive = false; clearInterval(t); };
+  }, []);
+  if (!base) return <div className="grid h-full place-items-center px-8 text-center text-13 text-muted-foreground">{error || '正在准备预览……'}</div>;
   return (
     <div className="flex h-full flex-col">
       <div className="mono flex shrink-0 items-center gap-1 px-4 py-2 text-11-5 text-muted-foreground">

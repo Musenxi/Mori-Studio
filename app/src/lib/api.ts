@@ -130,7 +130,7 @@ export const api = {
   setCommentToken: (token: string) => req('PUT', '/api/comments/token', { token }),
   markCommentsSeen: () => req('POST', '/api/comments/seen'),
 
-  previewStart: () => req<{ port: number; url: string | null; up: boolean }>('POST', '/api/preview/start', {}),
+  previewStart: () => req<{ url: string }>('POST', '/api/preview/start', {}),
   previewStop: () => req('POST', '/api/preview/stop', {}),
 
   git: () => req<GitInfo>('GET', '/api/git'),
