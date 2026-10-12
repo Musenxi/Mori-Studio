@@ -1,4 +1,4 @@
-//! MORI Studio 桌面版：窗口、启动页（选项目），给打开的项目起一个 Studio 服务（本机的 Node 跑 bin/mori-studio.mjs）。
+//! Mori Studio 桌面版：窗口、启动页（选项目），给打开的项目起一个 Studio 服务（本机的 Node 跑 bin/mori-studio.mjs）。
 //! 界面和接口都还是 Studio 自己的：选好项目后，窗口直接打开 http://127.0.0.1:<端口>/。
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
@@ -13,7 +13,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use serde::Serialize;
-use tauri::menu::{Menu, MenuItem, Submenu};
+use tauri::menu::{CheckMenuItem, Menu, MenuItem, Submenu};
 use tauri::{AppHandle, Manager, RunEvent, Url};
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons};
 use tauri_plugin_updater::UpdaterExt;
@@ -263,16 +263,65 @@ async fn open_project(app: AppHandle, path: String) -> Result<(), String> {
     write_recent(&app, &list);
 
     let w = app.get_webview_window("main").ok_or("没有窗口")?;
-    w.set_title(&format!("{} — MORI Studio", folder_name(&path))).map_err(|e| e.to_string())?;
+    w.set_title(&format!("{} — Mori Studio", folder_name(&path))).map_err(|e| e.to_string())?;
     w.navigate(Url::parse(&format!("http://127.0.0.1:{port}/")).unwrap()).map_err(|e| e.to_string())?;
     Ok(())
 }
+
+/// 应用图标：四种底色，菜单里切换，记在应用设置里；打包进去的 icns 是默认的深墨蓝（应用没开时 Dock、访达显示它）
+const ICONS: [(&str, &str, &[u8]); 4] = [
+    ("navy", "深墨蓝", include_bytes!("../app-icons/navy.png")),
+    ("blue", "克莱因蓝", include_bytes!("../app-icons/blue.png")),
+    ("ink", "墨黑", include_bytes!("../app-icons/ink.png")),
+    ("paper", "米纸", include_bytes!("../app-icons/paper.png")),
+];
+
+/// 菜单里的四个勾选项，切换时更新勾选状态
+struct IconMenu(Vec<(&'static str, CheckMenuItem<tauri::Wry>)>);
+
+fn settings_file(app: &AppHandle) -> Option<PathBuf> {
+    app.path().app_config_dir().ok().map(|d| d.join("settings.json"))
+}
+
+fn saved_icon(app: &AppHandle) -> String {
+    settings_file(app)
+        .and_then(|f| std::fs::read_to_string(f).ok())
+        .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok())
+        .and_then(|v| v["icon"].as_str().map(String::from))
+        .filter(|id| ICONS.iter().any(|(i, _, _)| i == id))
+        .unwrap_or_else(|| ICONS[0].0.into())
+}
+
+fn save_icon(app: &AppHandle, id: &str) {
+    if let Some(f) = settings_file(app) {
+        let mut v = std::fs::read_to_string(&f).ok().and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok()).unwrap_or_else(|| serde_json::json!({}));
+        v["icon"] = id.into();
+        let _ = std::fs::create_dir_all(f.parent().unwrap());
+        let _ = std::fs::write(f, v.to_string());
+    }
+}
+
+/// 换 Dock 上的图标（只在应用开着时有效；要在主线程调用）
+#[cfg(target_os = "macos")]
+fn set_dock_icon(id: &str) {
+    use objc2::AllocAnyThread;
+    use objc2::MainThreadMarker;
+    use objc2_app_kit::{NSApplication, NSImage};
+    use objc2_foundation::NSData;
+    let (Some(mtm), Some((_, _, png))) = (MainThreadMarker::new(), ICONS.iter().find(|(i, _, _)| *i == id)) else { return };
+    let data = NSData::with_bytes(png);
+    if let Some(img) = NSImage::initWithData(NSImage::alloc(), &data) {
+        unsafe { NSApplication::sharedApplication(mtm).setApplicationIconImage(Some(&img)) };
+    }
+}
+#[cfg(not(target_os = "macos"))]
+fn set_dock_icon(_id: &str) {}
 
 /// 回到启动页（菜单“打开项目…”）
 fn back_to_launcher(app: &AppHandle) {
     stop(&app.state::<Studio>());
     if let Some(w) = app.get_webview_window("main") {
-        let _ = w.set_title("MORI Studio");
+        let _ = w.set_title("Mori Studio");
         let _ = w.navigate(Url::parse(LAUNCHER).unwrap());
     }
 }
@@ -317,7 +366,19 @@ fn main() {
             let menu = Menu::default(h)?;
             let open = MenuItem::with_id(h, "open-project", "打开项目…", true, Some("CmdOrCtrl+O"))?;
             menu.insert(&Submenu::with_items(h, "项目", true, &[&open])?, 1)?;
+            // 应用菜单（第一个）里加“应用图标”
+            let icon = saved_icon(h);
+            let checks = ICONS
+                .iter()
+                .map(|(id, label, _)| CheckMenuItem::with_id(h, format!("icon:{id}"), *label, true, *id == icon, None::<&str>))
+                .collect::<Result<Vec<_>, _>>()?;
+            let refs: Vec<&dyn tauri::menu::IsMenuItem<_>> = checks.iter().map(|c| c as _).collect();
+            if let Some(app_menu) = menu.items()?.first().and_then(|m| m.as_submenu().cloned()) {
+                app_menu.insert(&Submenu::with_items(h, "应用图标", true, &refs)?, 1)?;
+            }
+            app.manage(IconMenu(ICONS.iter().map(|(id, _, _)| *id).zip(checks).collect()));
             app.set_menu(menu)?;
+            set_dock_icon(&icon);
             if !cfg!(debug_assertions) {
                 check_update(h.clone());
             }
@@ -333,8 +394,16 @@ fn main() {
             Ok(())
         })
         .on_menu_event(|app, e| {
-            if e.id() == "open-project" {
+            let id = e.id().as_ref();
+            if id == "open-project" {
                 back_to_launcher(app);
+            } else if let Some(icon) = id.strip_prefix("icon:") {
+                save_icon(app, icon);
+                set_dock_icon(icon);
+                // 只勾选中的那个（点已勾选的那项也保持勾选）
+                for (other, item) in &app.state::<IconMenu>().0 {
+                    let _ = item.set_checked(*other == icon);
+                }
             }
         })
         .build(tauri::generate_context!())
