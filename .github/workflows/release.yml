@@ -1,0 +1,51 @@
+# 推 v* 标签时打包桌面版，传到 GitHub Release 草稿（检查后手动发布，已装的应用才会收到更新）
+# 要先在仓库的 Secrets 里放 TAURI_SIGNING_PRIVATE_KEY（更新包的签名私钥），见 README“发布桌面版”
+name: 发布桌面版
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15        # Apple 芯片
+            target: aarch64-apple-darwin
+          - runner: macos-15-intel  # Intel；sharp 的原生模块要在对应架构上装，所以分开打
+            target: x86_64-apple-darwin
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: desktop/src-tauri
+      - run: pnpm install --frozen-lockfile
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ''
+        with:
+          projectPath: desktop
+          tauriScript: ${{ github.workspace }}/node_modules/.bin/tauri
+          tagName: ${{ github.ref_name }}
+          releaseName: MORI Studio ${{ github.ref_name }}
+          releaseBody: |
+            需要本机装有 Node.js 22.12 或更新。
+            应用没有 Apple 签名，第一次打开前在终端运行：
+            xattr -cr "/Applications/MORI Studio.app"
+          releaseDraft: true
+          args: --target ${{ matrix.target }}

@@ -15,6 +15,8 @@ use std::time::{Duration, Instant};
 use serde::Serialize;
 use tauri::menu::{Menu, MenuItem, Submenu};
 use tauri::{AppHandle, Manager, RunEvent, Url};
+use tauri_plugin_dialog::{DialogExt, MessageDialogButtons};
+use tauri_plugin_updater::UpdaterExt;
 
 /// Studio 用到的 Vite、Astro 要求的最低版本
 const MIN_NODE: (u32, u32) = (22, 12);
@@ -99,10 +101,14 @@ fn node_env() -> Result<NodeEnv, String> {
     Ok(NodeEnv { node, path })
 }
 
-/// Studio 的代码在哪：MORI_STUDIO_DIR > 打包进应用的 resources/studio > 开发时的仓库根目录
+/// Studio 的代码在哪：MORI_STUDIO_DIR > 开发时用仓库根目录 > 打包进应用的 resources/studio
 fn studio_dir(app: &AppHandle) -> PathBuf {
     if let Ok(d) = std::env::var("MORI_STUDIO_DIR") {
         return d.into();
+    }
+    let repo = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+    if cfg!(debug_assertions) {
+        return repo;
     }
     if let Ok(r) = app.path().resource_dir() {
         let d = r.join("studio");
@@ -110,7 +116,7 @@ fn studio_dir(app: &AppHandle) -> PathBuf {
             return d;
         }
     }
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
+    repo
 }
 
 fn free_port() -> Result<u16, String> {
@@ -271,9 +277,38 @@ fn back_to_launcher(app: &AppHandle) {
     }
 }
 
+/// 启动时查一次更新（GitHub Release 上的 latest.json）；有新版本就问，同意了下载、装好、重启
+fn check_update(app: AppHandle) {
+    tauri::async_runtime::spawn(async move {
+        let Ok(updater) = app.updater() else { return };
+        let Ok(Some(update)) = updater.check().await else { return };
+        let h = app.clone();
+        app.dialog()
+            .message(format!("有新版本 {}。", update.version))
+            .buttons(MessageDialogButtons::OkCancelCustom("更新并重启".into(), "以后".into()))
+            .show(move |yes| {
+                if !yes {
+                    return;
+                }
+                tauri::async_runtime::spawn(async move {
+                    match update.download_and_install(|_, _| {}, || {}).await {
+                        Ok(()) => {
+                            stop(&h.state::<Studio>());
+                            h.restart();
+                        }
+                        Err(e) => {
+                            h.dialog().message(format!("更新失败：{e}")).show(|_| {});
+                        }
+                    }
+                });
+            });
+    });
+}
+
 fn main() {
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(Studio::default())
         .invoke_handler(tauri::generate_handler![recent_projects, open_project, forget_project])
         .setup(|app| {
@@ -283,6 +318,9 @@ fn main() {
             let open = MenuItem::with_id(h, "open-project", "打开项目…", true, Some("CmdOrCtrl+O"))?;
             menu.insert(&Submenu::with_items(h, "项目", true, &[&open])?, 1)?;
             app.set_menu(menu)?;
+            if !cfg!(debug_assertions) {
+                check_update(h.clone());
+            }
             // 命令行带了项目目录就直接打开（mori-studio-desktop <目录>）
             if let Some(p) = std::env::args().nth(1).filter(|p| Path::new(p).is_dir()) {
                 let h = h.clone();

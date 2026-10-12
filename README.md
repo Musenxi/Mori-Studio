@@ -18,16 +18,47 @@ node bin/mori-studio.mjs --root 博客项目目录
 
 ## 桌面版
 
+### 安装
+
+在 [Releases](https://github.com/Musenxi/Mori-Studio/releases) 下载 `.dmg`（Apple 芯片选 `aarch64`，Intel 选 `x64`），把 MORI Studio 拖进“应用程序”。要先装 Node.js 22.12 或更新。
+
+应用没有 Apple 签名，第一次打开前在终端运行一次（不然会提示“已损坏”或“无法验证开发者”）：
+
 ```bash
-pnpm desktop          # 开发：编译并打开窗口
-pnpm desktop:build    # 打包成 .app
+xattr -cr "/Applications/MORI Studio.app"
+```
+
+之后有新版本时，打开应用会提示更新。
+
+### 开发
+
+```bash
+pnpm desktop          # 编译并打开窗口
+pnpm desktop:build    # 本机打包（.app、.dmg）
 ```
 
 要先装 Rust（`brew install rustup && rustup default stable`）。桌面版是 Tauri 写的壳：启动页选项目（最近打开的记在应用设置里），给项目起一个 Studio 服务（随机端口），窗口直接打开它；菜单“项目 → 打开项目…”（⌘O）回到启动页。`mori-studio-desktop 项目目录` 直接打开。
 
-- 用本机的 Node（22.12 以上，从登录 shell 里找，nvm、Homebrew 装的都行）；`MORI_NODE` 可以指定。
+- 用本机的 Node（从登录 shell 里找，nvm、Homebrew 装的都行）；`MORI_NODE` 可以指定。
+- 打包时 `desktop/scripts/stage-studio.mjs` 把 Studio 的代码和运行依赖放进应用（`Contents/Resources/studio`）；开发时直接用仓库里的。
 - 界面按项目构建在应用缓存里（`~/Library/Caches/app.mori.studio/ui/`），不动仓库里的 `dist/`。
 - 评论管理令牌、图床的 Secret Key 存在系统钥匙串（“MORI Studio”），按评论服务地址 / 存储桶存，几个项目共用；命令行版也一样。以前存在 `.mori-studio.json` 里的，打开项目时自动搬进去。
+
+### 发布
+
+GitHub Actions（`.github/workflows/release.yml`）在推 `v*` 标签时分别打 Apple 芯片和 Intel 两个包，连同更新包传到 Release 草稿。
+
+1. 改 `package.json` 的 `version`（桌面版的版本号就用它），提交。
+2. `git tag v0.1.0 && git push origin main --tags`
+3. Actions 跑完后到 Releases 检查草稿，发布。发布以后，已经装了的应用才会收到更新。
+
+更新包要用私钥签名，公钥在 `desktop/src-tauri/tauri.conf.json`。私钥在本机 `~/.tauri/mori-studio.key`，第一次发布前放进仓库的 Secrets：
+
+```bash
+gh secret set TAURI_SIGNING_PRIVATE_KEY < ~/.tauri/mori-studio.key
+```
+
+私钥要备份：丢了的话，已装的应用就收不到之后的更新，只能重新下载安装。
 
 ## 功能
 

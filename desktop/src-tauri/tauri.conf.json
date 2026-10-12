@@ -1,19 +1,55 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "MORI Studio",
-  "version": "0.0.1",
+  "version": "../../package.json",
   "identifier": "app.mori.studio",
-  "build": { "frontendDist": "../launcher" },
+  "build": {
+    "frontendDist": "../launcher",
+    "beforeBuildCommand": "node scripts/stage-studio.mjs"
+  },
   "app": {
     "withGlobalTauri": true,
     "windows": [
-      { "label": "main", "title": "MORI Studio", "width": 1280, "height": 820, "minWidth": 900, "minHeight": 600 }
+      {
+        "label": "main",
+        "title": "MORI Studio",
+        "width": 1280,
+        "height": 820,
+        "minWidth": 900,
+        "minHeight": 600
+      }
     ],
-    "security": { "csp": null }
+    "security": {
+      "csp": null
+    }
   },
   "bundle": {
     "active": true,
-    "targets": ["app"],
-    "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.icns", "icons/icon.png"]
+    "targets": [
+      "app",
+      "dmg"
+    ],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.png"
+    ],
+    "resources": {
+      "studio/": "studio/"
+    },
+    "createUpdaterArtifacts": true,
+    "macOS": {
+      "signingIdentity": "-"
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDVCMjE1REIxQTYzNjFDOEYKUldTUEhEYW1zVjBoVzBrOXZ3NktacFBObEZ4dXczbUVRVzg0SFMxWkd0cmZ3TGdKcUNjT2hBR00K",
+      "endpoints": [
+        "https://github.com/Musenxi/Mori-Studio/releases/latest/download/latest.json"
+      ]
+    }
   }
 }
