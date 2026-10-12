@@ -8,6 +8,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync, copyFileSync } from '
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
+import exifReader from 'exif-reader';
 import sharp from 'sharp';
 
 const run = promisify(execFile);
@@ -39,6 +40,54 @@ export async function uprightJpeg(buffer, force = false) {
   const { format, orientation = 1 } = await sharp(buffer).metadata();
   if (format !== 'jpeg' || (orientation === 1 && !force)) return buffer;
   return sharp(buffer).rotate().withMetadata({ orientation: 1 }).jpeg({ quality: 90, mozjpeg: true }).toBuffer();
+}
+
+/**
+ * 清除位置信息（GPS）：在原 JPEG 的 EXIF 里把 GPS 目录清零（条目数、条目、值都抹掉），别的字节一个不动，
+ * 拍摄参数、镜头、时间都保留，也不重新压缩。没有定位、不是 JPEG 就原样返回
+ */
+export async function stripLocation(buffer) {
+  const { format, exif } = await sharp(buffer).metadata();
+  if (format !== 'jpeg' || !exif) return buffer;
+  let e;
+  try { e = exifReader(exif); } catch { return buffer; }
+  if (!Object.keys(e.GPSInfo ?? {}).length) return buffer;
+  const out = Buffer.from(buffer);
+  for (let p = 2; p + 4 <= out.length && out[p] === 0xff && out[p + 1] !== 0xda; ) {
+    const len = out.readUInt16BE(p + 2);
+    const data = p + 4;
+    if (out[p + 1] === 0xe1 && out.toString('latin1', data, data + 6) === 'Exif\0\0') wipeGps(out, data + 6, p + 2 + len);
+    p += 2 + len;
+  }
+  return out;
+}
+
+const TYPE_SIZE = [0, 1, 1, 2, 4, 8, 1, 1, 2, 4, 8, 4, 8];
+
+/** TIFF 结构里找到 GPS 目录（IFD0 的 0x8825 指针）并清零；end 是这段 EXIF 的结尾，越界的地方不碰 */
+function wipeGps(buf, tiff, end) {
+  const le = buf.toString('latin1', tiff, tiff + 2) === 'II';
+  const u16 = (o) => (le ? buf.readUInt16LE(o) : buf.readUInt16BE(o));
+  const u32 = (o) => (le ? buf.readUInt32LE(o) : buf.readUInt32BE(o));
+  const ok = (o, n) => o >= tiff && o + n <= end;
+  const ifd0 = tiff + u32(tiff + 4);
+  if (!ok(ifd0, 2)) return;
+  for (let i = 0, n = u16(ifd0); i < n; i++) {
+    const e = ifd0 + 2 + 12 * i;
+    if (!ok(e, 12) || u16(e) !== 0x8825) continue;
+    const gps = tiff + u32(e + 8);
+    if (!ok(gps, 2)) return;
+    const count = u16(gps);
+    if (!ok(gps, 2 + 12 * count + 4)) return;
+    // 先清每个条目的值（超过 4 字节的值放在别处），再清条目和下一个目录的指针
+    for (let j = 0; j < count; j++) {
+      const ge = gps + 2 + 12 * j;
+      const size = (TYPE_SIZE[u16(ge + 2)] ?? 0) * u32(ge + 4);
+      if (size > 4 && ok(tiff + u32(ge + 8), size)) buf.fill(0, tiff + u32(ge + 8), tiff + u32(ge + 8) + size);
+    }
+    buf.fill(0, gps, gps + 2 + 12 * count + 4);
+    return;
+  }
 }
 
 /**

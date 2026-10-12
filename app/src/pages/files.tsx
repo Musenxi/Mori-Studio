@@ -13,6 +13,7 @@ import { useConfirm } from '@/components/confirm';
 import { Input } from '@/components/ui/input';
 import { Empty, PageHeader } from '@/components/page';
 import { uploadedToast } from '@/components/asset-picker';
+import { StripLocationSwitch, useStripLocation } from '@/components/strip-location';
 
 const size = (n: number) => (n > 1024 * 1024 ? `${(n / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`);
 const href = (r: AssetInfo['usedBy'][number]) => (r.kind === 'page' ? `/pages/${r.id}` : r.kind === 'friends' ? '/friends' : `/posts/${r.id}`);
@@ -65,10 +66,11 @@ export default function Files() {
   const title = view === 'all' ? '全部' : view === 'unused' ? '没被引用' : view === 'similar' ? '看起来一样' : label(folder!);
 
   const reload = () => Promise.all([refetch(), refresh()]);
+  const [strip, setStrip] = useStripLocation();
   const upload = async (files: File[]) => {
     if (!files.some(isImageFile)) return toast.error('只能上传图片');
     setBusy(true);
-    try { uploadedToast(await api.uploadImages(files, folder ?? SHARED)); await reload(); } catch (e) { toast.error((e as Error).message); }
+    try { uploadedToast(await api.uploadImages(files, folder ?? SHARED, strip)); await reload(); } catch (e) { toast.error((e as Error).message); }
     setBusy(false);
   };
   const move = async (paths: string[], to: string) => {
@@ -159,6 +161,7 @@ export default function Files() {
     <div className="min-h-full">
       <PageHeader title="文件" sub={`${all.length} 张`} actions={<>
         <input ref={input} type="file" accept={IMAGE_ACCEPT} multiple hidden onChange={(e) => { void upload([...(e.target.files ?? [])]); e.target.value = ''; }} />
+        <StripLocationSwitch checked={strip} onCheckedChange={setStrip} />
         {data?.host && <Button variant="secondary" onClick={() => void sync()} disabled={syncing || !data.host.pending}><CloudUpload size={14} />{syncing ? '同步中……' : data.host.pending ? `同步到图床（${data.host.pending}）` : '已同步到图床'}</Button>}
         <Button variant="default" onClick={() => input.current?.click()} disabled={busy || view === 'similar'}><Upload size={14} />{busy ? '上传中……' : '上传图片'}</Button>
       </>} />

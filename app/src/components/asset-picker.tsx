@@ -11,6 +11,7 @@ import { Dialog } from '@/components/ui/dialog';
 import { ModalContent } from '@/components/modal';
 import { Input } from '@/components/ui/input';
 import { Segmented } from '@/components/segmented';
+import { StripLocationSwitch, useStripLocation } from '@/components/strip-location';
 
 /** 上传后的提示：几张是新存的，几张是已经有的 */
 export function uploadedToast({ paths, dups }: { paths: string[]; dups: number }) {
@@ -31,6 +32,7 @@ export function AssetDialog({ open, onOpenChange, onPick }: { open: boolean; onO
   const [busy, setBusy] = useState(false);
   const [q, setQ] = useState('');
   const input = useRef<HTMLInputElement>(null);
+  const [strip, setStrip] = useStripLocation();
   const all = useMemo(() => data?.assets ?? [], [data?.assets]);
   const inScope = all.filter((a) => (scope === 'all' ? true : a.folder === (scope === 'here' ? folder : SHARED)));
   const shown = inScope.filter((a) => a.path.toLowerCase().includes(q.toLowerCase()));
@@ -39,7 +41,7 @@ export function AssetDialog({ open, onOpenChange, onPick }: { open: boolean; onO
     if (!files.some(isImageFile)) return toast.error('只能上传图片');
     setBusy(true);
     try {
-      const r = await api.uploadImages(files, folder);
+      const r = await api.uploadImages(files, folder, strip);
       await Promise.all([refetch(), refresh()]);
       if (r.paths.length === 1) onPick(r.paths[0]);
       else uploadedToast(r);
@@ -61,6 +63,7 @@ export function AssetDialog({ open, onOpenChange, onPick }: { open: boolean; onO
         >
           <Upload size={16} />
           <span className="flex-1">{busy ? '上传中……' : '把图片拖到这里，或'}</span>
+          <StripLocationSwitch checked={strip} onCheckedChange={setStrip} />
           <input ref={input} type="file" accept={IMAGE_ACCEPT} multiple hidden onChange={(e) => { void upload([...(e.target.files ?? [])]); e.target.value = ''; }} />
           <Button size="sm" variant="secondary" onClick={() => input.current?.click()} disabled={busy}>选择文件</Button>
         </div>

@@ -75,19 +75,19 @@ export const api = {
   saveFriends: (text: string, lost: string) => req<{ ok: true; friends: Friend[]; text: string; lost: string }>('PUT', '/api/friends', { text, lost }),
 
   /** 上传一张图到某个文件夹；内容完全相同的图已经有了，就返回原来那张（dup） */
-  upload: async (file: File, folder: string) => {
-    const r = await fetch(`/api/assets/upload?folder=${encodeURIComponent(folder)}&name=${encodeURIComponent(file.name)}`, { method: 'PUT', body: file });
+  upload: async (file: File, folder: string, stripLocation = false) => {
+    const r = await fetch(`/api/assets/upload?folder=${encodeURIComponent(folder)}&name=${encodeURIComponent(file.name)}${stripLocation ? '&strip=1' : ''}`, { method: 'PUT', body: file });
     const j = await r.json().catch(() => ({}));
     if (!r.ok) throw new ApiError(j.error ?? '上传失败', r.status);
     return j as { ok: true; path: string; dup: boolean };
   },
-  /** 上传一批文件：图片（HEIC 在服务端转成 JPEG）；和图片同名的 .mov / .mp4 是实况照片的视频，跟着那张图片传。返回存下（或认出已有）的图片路径 */
-  uploadImages: async (files: File[], folder: string) => {
+  /** 上传一批文件：图片（HEIC 在服务端转成 JPEG）；和图片同名的 .mov / .mp4 是实况照片的视频，跟着那张图片传。stripLocation：存之前清掉 GPS。返回存下（或认出已有）的图片路径 */
+  uploadImages: async (files: File[], folder: string, stripLocation = false) => {
     const videos = new Map(files.filter(isVideoFile).map((f) => [stemOf(f.name), f]));
     const paths: string[] = [];
     let dups = 0;
     for (const f of files.filter(isImageFile)) {
-      const { path, dup } = await api.upload(f, folder);
+      const { path, dup } = await api.upload(f, folder, stripLocation);
       paths.push(path);
       if (dup) dups++;
       const video = videos.get(stemOf(f.name));

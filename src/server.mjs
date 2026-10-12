@@ -16,7 +16,7 @@ import { locate } from 'astro-mori/anchor';
 import { normalizeDoc } from 'astro-mori/flow';
 import { probeSite } from './probe.mjs';
 import { gitInfo, gitInit, publishGit, publishLocal } from './publish.mjs';
-import { HEIC_EXT, heicToJpeg, uprightJpeg, toWebMp4 } from './media.mjs';
+import { HEIC_EXT, heicToJpeg, uprightJpeg, stripLocation, toWebMp4 } from './media.mjs';
 import { hostReady, pendingAssets, syncToHost, testHost } from './cdn.mjs';
 import { listAssets, saveAsset, liveVideo, assetUsage, trashAsset, moveAssets, mergeAssets, indexAssets, rememberOrigin, findSame, similarGroups, sha256, cleanRel, SHARED } from './library.mjs';
 import { parseGpx, simplify, readExif, clusterStops } from './geo.mjs';
@@ -415,14 +415,17 @@ export async function startStudio({ root, port = 4400, dev = false }) {
         const raw = await readBody(req);
         const orig = sha256(raw);
         const ext = extname(name).toLowerCase();
+        const strip = url.searchParams.get('strip') === '1';
         if (!HEIC_EXT.has(ext) && !IMAGE_EXT.has(ext)) return send(res, 400, { error: '只接受图片文件' });
-        const known = await findSame(root, [orig]);
+        // 清除位置时不认原来存的同一张（那张可能带着定位），清完再比对
+        const known = strip ? undefined : await findSame(root, [orig]);
         if (known) return send(res, 200, { ok: true, path: known, dup: true });
         let body = raw;
         if (HEIC_EXT.has(ext)) {
           try { body = await heicToJpeg(raw); } catch (e) { return send(res, 400, { error: e.message }); }
           name = `${name.slice(0, -ext.length)}.jpg`;
         } else try { body = await uprightJpeg(raw); } catch { /* 读不了的图原样存，构建时再报 */ }
+        if (strip) try { body = await stripLocation(body); } catch { return send(res, 400, { error: '清除位置信息失败' }); }
         const same = body === raw ? undefined : await findSame(root, [sha256(body)]);
         if (same) return send(res, 200, { ok: true, path: same, dup: true });
         const saved = saveAsset(root, folder, name, body);
