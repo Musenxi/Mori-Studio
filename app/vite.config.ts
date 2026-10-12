@@ -14,7 +14,8 @@ export default defineConfig({
   root: fileURLToPath(new URL('.', import.meta.url)),
   plugins: [react(), tailwindcss()],
   resolve: { alias: [{ find: '@', replacement: fileURLToPath(new URL('./src', import.meta.url)) }, ...theme] },
-  build: { outDir: '../dist', emptyOutDir: true, sourcemap: false, chunkSizeWarningLimit: 900 },
+  // 输出目录：默认仓库里的 dist/；桌面版按项目放到应用缓存里（MORI_STUDIO_DIST）
+  build: { outDir: process.env.MORI_STUDIO_DIST ?? '../dist', emptyOutDir: true, sourcemap: false, chunkSizeWarningLimit: 900 },
   // 开发时：界面走 Vite（热更新），接口和项目里的图片转给本机的 Studio 服务
   server: { port: 5173, proxy: { '/api': STUDIO, '/asset': STUDIO }, fs: { allow: ['..', ROOT] } },
 });

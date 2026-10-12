@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MORI Studio</title>
+<style>
+  :root { --bg: #fafafa; --fg: #171717; --muted: #737373; --line: #e5e5e5; --hover: #f0f0f0; --danger: #b91c1c; color-scheme: light dark; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #171717; --fg: #fafafa; --muted: #a3a3a3; --line: #2e2e2e; --hover: #232323; --danger: #f87171; } }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); font: 14px/1.5 -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif; -webkit-user-select: none; user-select: none; }
+  main { max-width: 520px; margin: 0 auto; padding: 18vh 24px 48px; }
+  h1 { font-size: 15px; font-weight: 600; margin: 0 0 24px; }
+  ul { list-style: none; margin: 0 0 20px; padding: 0; border-top: 1px solid var(--line); }
+  li { display: flex; align-items: center; border-bottom: 1px solid var(--line); }
+  li button.open { flex: 1; min-width: 0; text-align: left; padding: 10px 8px; background: none; border: 0; color: inherit; font: inherit; cursor: default; }
+  li button.open:hover:not(:disabled) { background: var(--hover); }
+  li button.open:disabled { opacity: .45; }
+  .name { display: block; font-weight: 500; }
+  .path { display: block; color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl; text-align: left; }
+  li button.forget { visibility: hidden; padding: 6px 10px; background: none; border: 0; color: var(--muted); font: inherit; font-size: 16px; line-height: 1; cursor: default; }
+  li:hover button.forget { visibility: visible; }
+  li button.forget:hover { color: var(--fg); }
+  .pick { padding: 7px 14px; border: 1px solid var(--line); border-radius: 6px; background: none; color: inherit; font: inherit; cursor: default; }
+  .pick:hover:not(:disabled) { background: var(--hover); }
+  #status { margin-top: 16px; color: var(--muted); white-space: pre-wrap; -webkit-user-select: text; user-select: text; }
+  #status.error { color: var(--danger); }
+</style>
+</head>
+<body>
+<main>
+  <h1>MORI Studio</h1>
+  <ul id="recent" hidden></ul>
+  <button class="pick" id="pick">打开文件夹…</button>
+  <div id="status"></div>
+</main>
+<script>
+  const { invoke } = window.__TAURI__.core;
+  const { open } = window.__TAURI__.dialog;
+  const $ = (id) => document.getElementById(id);
+  let busy = false;
+
+  function status(text, error = false) {
+    $('status').textContent = text;
+    $('status').className = error ? 'error' : '';
+  }
+
+  async function openProject(path) {
+    if (busy) return;
+    busy = true;
+    document.querySelectorAll('button').forEach((b) => (b.disabled = true));
+    status('正在打开…');
+    try {
+      await invoke('open_project', { path }); // 成功后窗口会转到 Studio
+    } catch (e) {
+      status(String(e), true);
+      busy = false;
+      render();
+    }
+  }
+
+  async function render() {
+    const list = await invoke('recent_projects');
+    const ul = $('recent');
+    ul.replaceChildren(...list.map((p) => {
+      const li = document.createElement('li');
+      const b = document.createElement('button');
+      b.className = 'open';
+      b.disabled = !p.exists;
+      b.innerHTML = '<span class="name"></span><span class="path"></span>';
+      b.querySelector('.name').textContent = p.name;
+      b.querySelector('.path').textContent = p.exists ? p.path : `${p.path}（不存在）`;
+      b.onclick = () => openProject(p.path);
+      const x = document.createElement('button');
+      x.className = 'forget';
+      x.title = '从列表移除';
+      x.textContent = '×';
+      x.onclick = async () => { await invoke('forget_project', { path: p.path }); render(); };
+      li.append(b, x);
+      return li;
+    }));
+    ul.hidden = list.length === 0;
+    $('pick').disabled = false;
+  }
+
+  $('pick').onclick = async () => {
+    const dir = await open({ directory: true });
+    if (dir) openProject(dir);
+  };
+  render();
+</script>
+</body>
+</html>

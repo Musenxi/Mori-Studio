@@ -24,7 +24,7 @@ import { commentsClient } from './comments.mjs';
 import { keychain, commentsAccount, imageHostAccount } from './secrets.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
-const dist = join(here, '../dist'); // 界面：app/ 用 Vite 构建出来的静态文件
+const dist = process.env.MORI_STUDIO_DIST ?? join(here, '../dist'); // 界面：app/ 用 Vite 构建出来的静态文件（桌面版放在应用缓存里）
 const require = createRequire(import.meta.url);
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.json': 'application/json; charset=utf-8', '.svg': 'image/svg+xml', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp', '.avif': 'image/avif', '.gif': 'image/gif' };
 

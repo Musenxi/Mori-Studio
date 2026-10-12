@@ -16,6 +16,19 @@ node bin/mori-studio.mjs --root 博客项目目录
 
 改界面：`MORI_ROOT=博客项目目录 pnpm dev:ui`（热更新，接口转发给本机的 Studio）。测试：`MORI_THEME=主题仓库目录 pnpm test`。
 
+## 桌面版
+
+```bash
+pnpm desktop          # 开发：编译并打开窗口
+pnpm desktop:build    # 打包成 .app
+```
+
+要先装 Rust（`brew install rustup && rustup default stable`）。桌面版是 Tauri 写的壳：启动页选项目（最近打开的记在应用设置里），给项目起一个 Studio 服务（随机端口），窗口直接打开它；菜单“项目 → 打开项目…”（⌘O）回到启动页。`mori-studio-desktop 项目目录` 直接打开。
+
+- 用本机的 Node（22.12 以上，从登录 shell 里找，nvm、Homebrew 装的都行）；`MORI_NODE` 可以指定。
+- 界面按项目构建在应用缓存里（`~/Library/Caches/app.mori.studio/ui/`），不动仓库里的 `dist/`。
+- 评论管理令牌、图床的 Secret Key 存在系统钥匙串（“MORI Studio”），按评论服务地址 / 存储桶存，几个项目共用；命令行版也一样。以前存在 `.mori-studio.json` 里的，打开项目时自动搬进去。
+
 ## 功能
 
 - 读写项目里的内容 JSON，自动保存；保存时用主题同一份 schema 校验，问题会列出来（不阻止保存）。删除是移进 `.mori-trash/`。
