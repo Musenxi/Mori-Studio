@@ -20,6 +20,7 @@ import { HEIC_EXT, heicToJpeg, uprightJpeg, stripLocation, toWebMp4 } from './me
 import { hostReady, pendingAssets, syncToHost, testHost } from './cdn.mjs';
 import { listAssets, saveAsset, liveVideo, assetUsage, trashAsset, moveAssets, mergeAssets, indexAssets, rememberOrigin, findSame, similarGroups, sha256, cleanRel, SHARED } from './library.mjs';
 import { parseGpx, simplify, readExif, clusterStops } from './geo.mjs';
+import { commentsClient } from './comments.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const dist = join(here, '../dist'); // 界面：app/ 用 Vite 构建出来的静态文件
@@ -138,26 +139,14 @@ export async function startStudio({ root, port = 4400, dev = false }) {
   const tokenFile = join(root, '.mori-studio.json');
   const adminToken = () => process.env.MORI_ADMIN_TOKEN || (existsSync(tokenFile) ? JSON.parse(readFileSync(tokenFile, 'utf8')).adminToken : '');
   const commentsEndpoint = () => (config.comments?.provider === 'mori' ? String(config.comments.endpoint ?? '').replace(/\/$/, '') : '');
-  async function admin(method, path, body) {
-    const ep = commentsEndpoint(), tk = adminToken();
-    if (!ep) throw Object.assign(new Error('mori.config.ts 里没有启用自建评论（comments.provider = mori）'), { code: 400 });
-    if (!tk) throw Object.assign(new Error('还没有管理令牌'), { code: 401 });
-    const r = await fetch(`${ep}/admin${path}`, { method, headers: { Authorization: `Bearer ${tk}`, 'Content-Type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body), signal: AbortSignal.timeout(8000) });
-    const j = await r.json().catch(() => ({}));
-    if (!r.ok) throw Object.assign(new Error(j.error ?? `评论服务返回 ${r.status}`), { code: r.status === 401 ? 401 : 502 });
-    return j;
-  }
+  const comments = commentsClient({ endpoint: commentsEndpoint, token: adminToken });
 
   // 评论数字：总数来自评论服务的 /stats；“未读”= 比上次打开评论页更晚的评论（上次时间存在 .mori-studio.json）
   const readState = () => (existsSync(tokenFile) ? JSON.parse(readFileSync(tokenFile, 'utf8')) : {});
   const writeState = (patch) => writeFileSync(tokenFile, JSON.stringify({ ...readState(), ...patch }) + '\n', { mode: 0o600 });
   async function commentNumbers() {
     if (!commentsEndpoint() || !adminToken()) return null;
-    try {
-      const [st, list] = await Promise.all([admin('GET', '/stats'), admin('GET', '/comments?limit=500')]);
-      const seen = readState().commentsSeenAt ?? 0;
-      return { total: (st.pending ?? 0) + (st.approved ?? 0) + (st.hidden ?? 0), pending: st.pending ?? 0, unread: list.comments.filter((c) => c.createdAt > seen).length };
-    } catch { return null; }
+    try { return await comments.numbers(readState().commentsSeenAt ?? 0); } catch { return null; }
   }
 
   // 图床：设置存在 .mori-studio.json 的 imageHost（密钥只进不出）
@@ -221,7 +210,7 @@ export async function startStudio({ root, port = 4400, dev = false }) {
       /* ── 仪表盘数字：本地能算的现算；阅读量、在线访客来自评论服务（连不上给 null）；点赞还没有 ── */
       if (req.method === 'GET' && p === '/api/stats') {
         const entries = listEntries(root);
-        const [cn, tr] = await Promise.all([commentNumbers(), commentsEndpoint() && adminToken() ? admin('GET', '/traffic').catch(() => null) : null]);
+        const [cn, tr] = await Promise.all([commentNumbers(), commentsEndpoint() && adminToken() ? comments.traffic().catch(() => null) : null]);
         return send(res, 200, {
           pages: countPages(root), categories: (config.categories ?? []).length, words: entries.reduce((a, e) => a + (e.words ?? 0), 0),
           comments: cn ? { total: cn.total, unread: cn.unread } : null, views: tr?.views ?? null, online: tr?.online ?? null, likes: null,
@@ -299,31 +288,32 @@ export async function startStudio({ root, port = 4400, dev = false }) {
       let mm;
 
       /* ── 评论管理 ── */
-      if ((mm = m(/^\/api\/comments(?:\/(stats|token|seen|settings|spam|mail|mail\/test|(\d+)))?$/))) {
+      if ((mm = m(/^\/api\/comments(?:\/(info|stats|token|seen|settings|spam|mail|mail\/test|(\d+)))?$/))) {
         try {
-          if (!mm[1] && req.method === 'GET') return send(res, 200, await admin('GET', `/comments?limit=300${url.searchParams.get('status') ? `&status=${url.searchParams.get('status')}` : ''}`));
+          if (!mm[1] && req.method === 'GET') return send(res, 200, await comments.list({ status: url.searchParams.get('status'), before: url.searchParams.get('before'), limit: 300 }));
+          if (mm[1] === 'info' && req.method === 'GET') return send(res, 200, await comments.check());
           // 以博主身份发评论 / 回复：名字、邮箱、网址取 mori.config.ts 的 author
           if (!mm[1] && req.method === 'POST') {
             const { entry, body, parentId, title } = await readJson(req);
             const a = config.author ?? {};
             if (!a.name) return send(res, 400, { error: '还没有填作者名字（设定 → 作者）' });
-            return send(res, 201, await admin('POST', '/comments', { entry, body, parentId, title, name: a.name, email: a.email, url: a.url }));
+            return send(res, 201, await comments.reply({ entry, body, parentId, title, name: a.name, email: a.email, url: a.url }));
           }
-          if (mm[1] === 'mail' && req.method === 'GET') return send(res, 200, await admin('GET', '/mail'));
-          if (mm[1] === 'mail' && req.method === 'PUT') return send(res, 200, await admin('PUT', '/mail', await readJson(req)));
-          if (mm[1] === 'mail/test' && req.method === 'POST') return send(res, 200, await admin('POST', '/mail/test'));
-          if (mm[1] === 'spam' && req.method === 'DELETE') return send(res, 200, await admin('DELETE', '/spam'));
-          if (mm[1] === 'settings' && req.method === 'GET') return send(res, 200, await admin('GET', '/settings'));
-          if (mm[1] === 'settings' && req.method === 'PUT') return send(res, 200, await admin('PUT', '/settings', await readJson(req)));
-          if (mm[1] === 'stats' && req.method === 'GET') return send(res, 200, await admin('GET', '/stats'));
+          if (mm[1] === 'mail' && req.method === 'GET') return send(res, 200, await comments.mail());
+          if (mm[1] === 'mail' && req.method === 'PUT') return send(res, 200, await comments.saveMail(await readJson(req)));
+          if (mm[1] === 'mail/test' && req.method === 'POST') return send(res, 200, await comments.testMail());
+          if (mm[1] === 'spam' && req.method === 'DELETE') return send(res, 200, await comments.clearSpam());
+          if (mm[1] === 'settings' && req.method === 'GET') return send(res, 200, await comments.settings());
+          if (mm[1] === 'settings' && req.method === 'PUT') return send(res, 200, await comments.saveSettings(await readJson(req)));
+          if (mm[1] === 'stats' && req.method === 'GET') return send(res, 200, await comments.stats());
           if (mm[1] === 'seen' && req.method === 'POST') { writeState({ commentsSeenAt: Date.now() }); return send(res, 200, { ok: true }); }
           if (mm[1] === 'token' && req.method === 'PUT') {
             const { token } = await readJson(req);
             writeState({ adminToken: String(token ?? '').trim() });
             return send(res, 200, { ok: true });
           }
-          if (mm[2] && req.method === 'PATCH') return send(res, 200, await admin('PATCH', `/comments/${mm[2]}`, await readJson(req)));
-          if (mm[2] && req.method === 'DELETE') return send(res, 200, await admin('DELETE', `/comments/${mm[2]}`));
+          if (mm[2] && req.method === 'PATCH') return send(res, 200, await comments.setStatus(mm[2], (await readJson(req)).status));
+          if (mm[2] && req.method === 'DELETE') return send(res, 200, await comments.remove(mm[2]));
         } catch (e) { return send(res, e.code ?? 500, { error: e.message }); }
       }
 
@@ -349,8 +339,7 @@ export async function startStudio({ root, port = 4400, dev = false }) {
           let annotationWarnings;
           if (kind !== 'page' && commentsEndpoint() && adminToken()) {
             try {
-              const list = await admin('GET', `/comments?status=approved&limit=500&entry=${encodeURIComponent(`${KINDS[kind]}/${id}`)}`);
-              annotationWarnings = brokenAnnotations(kind, data, list.comments);
+              annotationWarnings = brokenAnnotations(kind, data, await comments.listAll({ status: 'approved', entry: `${KINDS[kind]}/${id}` }));
             } catch { /* 评论服务连不上就不检查 */ }
           }
           return send(res, 200, { ...v, saved: true, annotationWarnings });
