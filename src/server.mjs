@@ -3,7 +3,7 @@
  * 界面用 Preact + htm，不需要构建：/vendor/ 直接指向 node_modules 里的现成模块文件。
  */
 import { createServer } from 'node:http';
-import { createReadStream, existsSync, statSync, readFileSync, writeFileSync, utimesSync, mkdirSync, rmSync } from 'node:fs';
+import { createReadStream, existsSync, statSync, readFileSync, writeFileSync, utimesSync, mkdirSync, rmSync, realpathSync } from 'node:fs';
 import { join, extname, normalize, resolve, dirname, basename } from 'node:path';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
@@ -23,11 +23,26 @@ import { parseGpx, simplify, readExif, clusterStops } from './geo.mjs';
 import { commentsClient } from './comments.mjs';
 import { keychain, commentsAccount, imageHostAccount } from './secrets.mjs';
 import { previewer } from './preview.mjs';
+import { markRunning } from './running.mjs';
+import { createMcpServer } from './mcp.mjs';
+import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const dist = process.env.MORI_STUDIO_DIST ?? join(here, '../dist'); // 界面：app/ 用 Vite 构建出来的静态文件（桌面版放在应用缓存里）
 const require = createRequire(import.meta.url);
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.json': 'application/json; charset=utf-8', '.svg': 'image/svg+xml', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp', '.avif': 'image/avif', '.gif': 'image/gif', '.ico': 'image/x-icon' };
+
+/**
+ * 给 MCP 客户端配置用的 node 路径：process.execPath 是解开链接后的真实路径（Homebrew 的带版本号，升级后就没了），
+ * 优先用 PATH 里指向同一个程序的那个（/opt/homebrew/bin/node 这种）
+ */
+function stableNode() {
+  const real = realpathSync(process.execPath);
+  for (const dir of (process.env.PATH ?? '').split(':')) {
+    try { if (dir && realpathSync(join(dir, 'node')) === real) return join(dir, 'node'); } catch { /* 这个目录里没有 */ }
+  }
+  return process.execPath;
+}
 
 /** 只认本机的名字：防 DNS 重绑定（Host）和别的网站借你的浏览器来改文件、触发发布（Origin） */
 const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]', '::1']);
@@ -198,6 +213,15 @@ export async function startStudio({ root, port = 4400, dev = false }) {
       const p = decodeURIComponent(url.pathname);
       const m = (re) => p.match(re);
 
+      /* ── MCP（Streamable HTTP，无会话）：每个请求一个服务实例，工具再调本服务的 /api，见 mcp.mjs ── */
+      if (p === '/mcp') {
+        const mcp = createMcpServer(`http://127.0.0.1:${server.address().port}`);
+        const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
+        res.on('close', () => { void transport.close(); void mcp.close(); });
+        await mcp.connect(transport);
+        return await transport.handleRequest(req, res);
+      }
+
       /* ── 静态：界面、第三方模块、项目里的图片 ── */
       if (req.method === 'GET' && !p.startsWith('/api/')) {
         // 界面：先找构建产物里的同名文件；没有就当作界面里的页面地址（/posts/xxx 这类），交给前端路由
@@ -228,13 +252,16 @@ export async function startStudio({ root, port = 4400, dev = false }) {
         return send(res, 404, { error: 'not found' });
       }
 
+      /* ── 在不在、是哪个项目（mori-studio mcp 找正在跑的 Studio 用，要快） ── */
+      if (req.method === 'GET' && p === '/api/ping') return send(res, 200, { root });
+
       /* ── 项目概况 ── */
       if (req.method === 'GET' && p === '/api/project') {
         const cn = await commentNumbers(); // 侧栏上的未读数量；评论服务连不上就当 0
         const pending = cn?.unread ?? 0;
         return send(res, 200, {
           root, configPath, config: { title: config.title ?? 'Mori', icon: config.icon || (siteIcons?.DEFAULT_ICON ?? null), iconStamp: (() => { const f = siteIconFile(); return f ? statSync(f).mtimeMs : 0; })(), iconPresets: siteIcons?.ICONS ?? [], description: config.description ?? '', accent: config.accent ?? '#002fa7', accentDark: config.accentDark, categories: config.categories ?? [], home: config.home, archive: config.archive, feed: config.feed, comments: config.comments?.provider === 'mori' ? { avatar: config.comments.avatar, status: config.comments.status ?? 'on' } : undefined, nav: config.nav ?? null, actions: config.actions ?? null, actionsLayout: config.actionsLayout === 'split' ? 'split' : 'merged', lang: config.lang ?? 'zh-CN', head: typeof config.head === 'string' ? config.head : '', author: config.author ?? {}, site: typeof config.site === 'string' ? config.site : '' },
-          entries: listEntries(root), pages: listPages(root), assets: listAssets(root), dev, preview: { url: await preview.url() }, publish: config.publish ?? null, comments: { provider: config.comments?.provider ?? null, avatar: avatarTemplate(config.comments?.avatar), endpoint: commentsEndpoint(), hasToken: !!adminToken(), pending },
+          entries: listEntries(root), pages: listPages(root), assets: listAssets(root), dev, preview: { url: await preview.url() }, mcp: { command: stableNode(), args: [join(here, '../bin/mori-studio.mjs'), 'mcp', '--root', root], url: `http://127.0.0.1:${server.address().port}/mcp` }, publish: config.publish ?? null, comments: { provider: config.comments?.provider ?? null, avatar: avatarTemplate(config.comments?.avatar), endpoint: commentsEndpoint(), hasToken: !!adminToken(), pending },
         });
       }
 
@@ -344,7 +371,7 @@ export async function startStudio({ root, port = 4400, dev = false }) {
       /* ── 评论管理 ── */
       if ((mm = m(/^\/api\/comments(?:\/(info|stats|token|seen|settings|spam|mail|mail\/test|(\d+)))?$/))) {
         try {
-          if (!mm[1] && req.method === 'GET') return send(res, 200, await comments.list({ status: url.searchParams.get('status'), before: url.searchParams.get('before'), limit: 300 }));
+          if (!mm[1] && req.method === 'GET') { const q = (k) => url.searchParams.get(k); return send(res, 200, await comments.list({ status: q('status'), entry: q('entry'), since: q('since'), before: q('before'), limit: Math.min(300, +q('limit') || 300) })); }
           if (mm[1] === 'info' && req.method === 'GET') return send(res, 200, await comments.check());
           // 以博主身份发评论 / 回复：名字、邮箱、网址取 mori.config.ts 的 author
           if (!mm[1] && req.method === 'POST') {
@@ -578,5 +605,7 @@ export async function startStudio({ root, port = 4400, dev = false }) {
   });
 
   await new Promise((ok, fail) => { server.once('error', fail); server.listen(port, '127.0.0.1', ok); });
+  port = server.address().port; // 传 0 时是随机端口
+  markRunning(root, port);
   return { server, url: `http://127.0.0.1:${port}/`, root, stop: () => new Promise((r) => server.close(r)) };
 }

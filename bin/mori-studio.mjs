@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 /**
  *   mori-studio [--root 站点项目目录] [--port 4400] [--dev]
+ *   mori-studio mcp [--root 站点项目目录]：MCP（stdio），给 Claude 桌面版这类客户端用。这个项目有 Studio 在跑就连过去，没有就自己起一个（不带界面）
  *   MORI_STUDIO_PARENT=stdin：标准输入关了就退出（桌面版用）
  *   MORI_STUDIO_DIST=目录：界面构建到哪里（默认 dist/；桌面版每个项目一份）
  *   --dev（或环境变量 MORI_STUDIO_DEV=1）：开发模式。构建后自动重启预览用的 astro dev，发布目标里多一个“本地文件夹”。不加就是正常运行。
@@ -39,16 +40,38 @@ async function ensureUi(root) {
 const args = process.argv.slice(2);
 const opt = (name, def) => { const k = args.indexOf(`--${name}`); return k >= 0 ? args[k + 1] : def; };
 
+/** MCP：标准输出只留给协议，日志都去标准错误 */
+async function mcp(project) {
+  console.log = console.error;
+  const { findRunning } = await import('../src/running.mjs');
+  let own = null;
+  const base = async () => {
+    const running = await findRunning(project);
+    if (running) return running;
+    if (!own) { const { startStudio } = await import('../src/server.mjs'); own = (await startStudio({ root: project, port: 0 })).url.replace(/\/$/, ''); }
+    return own;
+  };
+  const { createMcpServer } = await import('../src/mcp.mjs');
+  const { StdioServerTransport } = await import('@modelcontextprotocol/sdk/server/stdio.js');
+  await createMcpServer(base).connect(new StdioServerTransport());
+  process.stdin.on('end', () => process.exit(0)); // 客户端断开；自己起的 Studio 会让进程一直挂着，所以要主动退
+}
+
 try {
   const project = resolve(opt('root', process.cwd()));
-  useTheme(project);
-  await ensureUi(project);
-  const { startStudio } = await import('../src/server.mjs');
-  const dev = args.includes('--dev') || process.env.MORI_STUDIO_DEV === '1';
-  const { url, root } = await startStudio({ root: project, port: +opt('port', 4400), dev });
-  // 桌面版：壳通过标准输入连着我们，管道断了（壳退出、崩溃、被杀）就跟着退出，不留孤儿进程
-  if (process.env.MORI_STUDIO_PARENT === 'stdin') { process.stdin.on('end', () => process.exit(0)); process.stdin.resume(); }
-  console.log(`Mori Studio${dev ? '（开发模式）' : ''}\n  项目  ${root}\n  地址  ${url}\n\n只监听本机（127.0.0.1）。Ctrl+C 退出。`);
+  if (args[0] === 'mcp') {
+    useTheme(project);
+    await mcp(project);
+  } else {
+    useTheme(project);
+    await ensureUi(project);
+    const { startStudio } = await import('../src/server.mjs');
+    const dev = args.includes('--dev') || process.env.MORI_STUDIO_DEV === '1';
+    const { url, root } = await startStudio({ root: project, port: +opt('port', 4400), dev });
+    // 桌面版：壳通过标准输入连着我们，管道断了（壳退出、崩溃、被杀）就跟着退出，不留孤儿进程
+    if (process.env.MORI_STUDIO_PARENT === 'stdin') { process.stdin.on('end', () => process.exit(0)); process.stdin.resume(); }
+    console.log(`Mori Studio${dev ? '（开发模式）' : ''}\n  项目  ${root}\n  地址  ${url}\n\n只监听本机（127.0.0.1）。Ctrl+C 退出。`);
+  }
 } catch (e) {
   console.error(`启动失败：${e.message}`);
   process.exit(1);

@@ -16,6 +16,18 @@ node bin/mori-studio.mjs --root 博客项目目录
 
 改界面：`MORI_ROOT=博客项目目录 pnpm dev:ui`（热更新，接口转发给本机的 Studio）。测试：`MORI_THEME=主题仓库目录 pnpm test`。
 
+## MCP
+
+让 Claude 桌面版、Claude Code 这类 AI 客户端读写博客、管评论：读和改文章（正文用 Markdown，和编辑器一样，没改的段落原样保留）、新建、发布、往文章里加图、预览、构建和发布站点、看和回复评论、审核。
+
+```bash
+node bin/mori-studio.mjs mcp --root 博客项目目录
+```
+
+这是 stdio 的 MCP 服务：这个项目已经有 Studio 在跑（命令行版或桌面版）就连过去，没有就自己起一个不带界面的。配置可以在 Studio 的“设定 → MCP”里直接复制。Studio 服务本身也在 `/mcp` 上提供 Streamable HTTP。
+
+删除、撤回、发布到线上、删除评论这几个工具标了 destructive，客户端会先问你。
+
 ## 桌面版
 
 ### 安装

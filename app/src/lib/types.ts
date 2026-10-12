@@ -54,6 +54,8 @@ export interface Project {
   pages: PageSummary[];
   assets: string[];
   preview: { url: string | null };
+  /** 给 MCP 客户端的启动命令（stdio）和本服务上的 /mcp 地址 */
+  mcp: { command: string; args: string[]; url: string };
   publish: PublishConfig | null;
   comments: { provider: string | null; /** 头像地址模板，{hash} 换成评论的头像哈希；空 = 不显示 */ avatar: string; endpoint: string; hasToken: boolean; pending: number };
 }
