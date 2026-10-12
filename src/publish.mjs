@@ -129,7 +129,7 @@ export function publishLocal(root, dest, log) {
   mkdirSync(to, { recursive: true });
   for (const f of readdirSync(to)) rmSync(join(to, f), { recursive: true, force: true });
   cpSync(from, to, { recursive: true });
-  writeFileSync(join(to, MARKER), `由 MORI Studio 发布于 ${new Date().toISOString()}\n`);
+  writeFileSync(join(to, MARKER), `由 Mori Studio 发布于 ${new Date().toISOString()}\n`);
   log(`已复制到 ${to}\n`);
   return 0;
 }

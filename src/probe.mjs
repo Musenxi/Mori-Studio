@@ -46,7 +46,7 @@ export async function probeSite(input) {
   let u = new URL(input);
   for (let hop = 0; hop < 5; hop++) {
     await assertPublic(u);
-    const r = await fetch(u, { redirect: 'manual', signal: AbortSignal.timeout(8000), headers: { 'User-Agent': 'Mozilla/5.0 (MORI Studio)', Accept: 'text/html' } }).catch((e) => { throw new Error(e.name === 'TimeoutError' ? '等了 8 秒，对方没有响应' : '连不上这个网站'); });
+    const r = await fetch(u, { redirect: 'manual', signal: AbortSignal.timeout(8000), headers: { 'User-Agent': 'Mozilla/5.0 (Mori Studio)', Accept: 'text/html' } }).catch((e) => { throw new Error(e.name === 'TimeoutError' ? '等了 8 秒，对方没有响应' : '连不上这个网站'); });
     if (r.status >= 300 && r.status < 400 && r.headers.get('location')) { u = new URL(r.headers.get('location'), u); continue; }
     if (!r.ok) throw new Error(`对方返回了 ${r.status}`);
     const reader = r.body.getReader();

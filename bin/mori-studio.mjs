@@ -46,7 +46,7 @@ try {
   const { url, root } = await startStudio({ root: project, port: +opt('port', 4400), dev });
   // 桌面版：壳通过标准输入连着我们，管道断了（壳退出、崩溃、被杀）就跟着退出，不留孤儿进程
   if (process.env.MORI_STUDIO_PARENT === 'stdin') { process.stdin.on('end', () => process.exit(0)); process.stdin.resume(); }
-  console.log(`MORI Studio${dev ? '（开发模式）' : ''}\n  项目  ${root}\n  地址  ${url}\n\n只监听本机（127.0.0.1）。Ctrl+C 退出。`);
+  console.log(`Mori Studio${dev ? '（开发模式）' : ''}\n  项目  ${root}\n  地址  ${url}\n\n只监听本机（127.0.0.1）。Ctrl+C 退出。`);
 } catch (e) {
   console.error(`启动失败：${e.message}`);
   process.exit(1);

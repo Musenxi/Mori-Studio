@@ -69,7 +69,7 @@ export function Sidebar({ onCompose, onSearch }: { onCompose: () => void; onSear
       <div className="flex items-center gap-3 px-3 pb-4 pt-3 max-lg:justify-center max-lg:px-0">
         <span className="serif grid h-9 w-9 shrink-0 place-items-center rounded-11 bg-primary text-16 text-primary-foreground">{[...(project?.config.title ?? 'M')][0]}</span>
         <div className="min-w-0 max-lg:hidden">
-          <div className="truncate text-14-5 font-semibold leading-tight tracking-tight" title={project?.root}>{project?.config.title ?? 'MORI'}</div>
+          <div className="truncate text-14-5 font-semibold leading-tight tracking-tight" title={project?.root}>{project?.config.title ?? 'Mori'}</div>
           <div className="mono mt-0.5 text-10-5 leading-none text-muted-foreground">Studio{project?.dev ? ' · dev' : ''}</div>
         </div>
       </div>

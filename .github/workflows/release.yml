@@ -42,10 +42,10 @@ jobs:
           projectPath: desktop
           tauriScript: ${{ github.workspace }}/node_modules/.bin/tauri
           tagName: ${{ github.ref_name }}
-          releaseName: MORI Studio ${{ github.ref_name }}
+          releaseName: Mori Studio ${{ github.ref_name }}
           releaseBody: |
             需要本机装有 Node.js 22.12 或更新。
             应用没有 Apple 签名，第一次打开前在终端运行：
-            xattr -cr "/Applications/MORI Studio.app"
+            xattr -cr "/Applications/Mori Studio.app"
           releaseDraft: true
           args: --target ${{ matrix.target }}

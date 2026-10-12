@@ -1,6 +1,6 @@
-# MORI Studio
+# Mori Studio
 
-[MORI](https://github.com/Musenxi/Astro-Theme-Mori) 博客的本地写作与排版编辑器。读写项目里的内容文件，不需要 git。
+[Mori](https://github.com/Musenxi/Astro-Theme-Mori) 博客的本地写作与排版编辑器。读写项目里的内容文件，不需要 git。
 
 ```bash
 pnpm install
@@ -20,12 +20,12 @@ node bin/mori-studio.mjs --root 博客项目目录
 
 ### 安装
 
-在 [Releases](https://github.com/Musenxi/Mori-Studio/releases) 下载 `.dmg`（Apple 芯片选 `aarch64`，Intel 选 `x64`），把 MORI Studio 拖进“应用程序”。要先装 Node.js 22.12 或更新。
+在 [Releases](https://github.com/Musenxi/Mori-Studio/releases) 下载 `.dmg`（Apple 芯片选 `aarch64`，Intel 选 `x64`），把 Mori Studio 拖进“应用程序”。要先装 Node.js 22.12 或更新。
 
 应用没有 Apple 签名，第一次打开前在终端运行一次（不然会提示“已损坏”或“无法验证开发者”）：
 
 ```bash
-xattr -cr "/Applications/MORI Studio.app"
+xattr -cr "/Applications/Mori Studio.app"
 ```
 
 之后有新版本时，打开应用会提示更新。
@@ -42,7 +42,7 @@ pnpm desktop:build    # 本机打包（.app、.dmg）
 - 用本机的 Node（从登录 shell 里找，nvm、Homebrew 装的都行）；`MORI_NODE` 可以指定。
 - 打包时 `desktop/scripts/stage-studio.mjs` 把 Studio 的代码和运行依赖放进应用（`Contents/Resources/studio`）；开发时直接用仓库里的。
 - 界面按项目构建在应用缓存里（`~/Library/Caches/app.mori.studio/ui/`），不动仓库里的 `dist/`。
-- 评论管理令牌、图床的 Secret Key 存在系统钥匙串（“MORI Studio”），按评论服务地址 / 存储桶存，几个项目共用；命令行版也一样。以前存在 `.mori-studio.json` 里的，打开项目时自动搬进去。
+- 评论管理令牌、图床的 Secret Key 存在系统钥匙串（“Mori Studio”），按评论服务地址 / 存储桶存，几个项目共用；命令行版也一样。以前存在 `.mori-studio.json` 里的，打开项目时自动搬进去。
 
 ### 发布
 

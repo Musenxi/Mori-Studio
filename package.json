@@ -1,7 +1,7 @@
 {
   "name": "mori-studio",
   "version": "0.0.1",
-  "description": "MORI Studio — MORI 博客的本地写作与排版编辑器（读写项目里的内容文件，不需要 git）。",
+  "description": "Mori Studio — Mori 博客的本地写作与排版编辑器（读写项目里的内容文件，不需要 git）。",
   "license": "MIT",
   "type": "module",
   "bin": {

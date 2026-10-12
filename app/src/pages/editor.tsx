@@ -118,7 +118,7 @@ function Session({ routeKind, id, initial }: { routeKind: 'post' | 'page'; id: s
   };
 
   const path = routeKind === 'page' ? `/${id}/` : `/posts/${id}/`;
-  useEffect(() => { document.title = `${doc.title || id} · MORI Studio`; return () => { document.title = 'MORI Studio'; }; }, [doc.title, id]);
+  useEffect(() => { document.title = `${doc.title || id} · Mori Studio`; return () => { document.title = 'Mori Studio'; }; }, [doc.title, id]);
 
   const unsaved = state.status === 'dirty' || (state.status === 'saved' && heldCount > 0);
   const status = state.status === 'saving' ? '保存中……' : unsaved ? '未保存' : state.status === 'error' ? '保存失败' : state.errors.length ? `已保存 · ${state.errors.length} 处需要检查` : '已保存';

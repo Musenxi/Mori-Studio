@@ -1,15 +1,27 @@
 /**
- * 密钥（评论管理令牌、图床的 Secret Key）存在系统钥匙串里，服务名“MORI Studio”。
+ * 密钥（评论管理令牌、图床的 Secret Key）存在系统钥匙串里，服务名“Mori Studio”。
  * 账号名按密钥属于哪个服务来起，不按项目：换项目目录、几个项目连同一个服务，都共用一份。
  * 现在只有 macOS（用系统自带的 security 命令）；别的系统、或设了 MORI_STUDIO_KEYCHAIN=0（测试），keychain() 返回 null，调用方退回到项目里的 .mori-studio.json。
  */
 import { execFileSync, spawnSync } from 'node:child_process';
 
-const SERVICE = 'MORI Studio';
+const SERVICE = 'Mori Studio';
+/** 以前的服务名；读不到时去这里找，找到就搬过来 */
+const OLD_SERVICE = 'MORI Studio';
 const NOT_FOUND = 44;
 
 export const commentsAccount = (endpoint) => `comments:${endpoint}`;
 export const imageHostAccount = (h) => `s3:${h.endpoint ?? ''}/${h.bucket ?? ''}/${h.accessKeyId ?? ''}`;
+
+/** 读一项；没有是 ''。存的是 base64：security -w 遇到非 ASCII 会输出十六进制，统一编码就不用猜 */
+function find(service, account) {
+  try {
+    return Buffer.from(execFileSync('security', ['find-generic-password', '-s', service, '-a', account, '-w'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim(), 'base64').toString('utf8');
+  } catch (e) {
+    if (e.status !== NOT_FOUND) throw new Error(`读取钥匙串失败：${e.message}`);
+    return '';
+  }
+}
 
 export function keychain() {
   if (process.platform !== 'darwin' || process.env.MORI_STUDIO_KEYCHAIN === '0') return null;
@@ -21,11 +33,11 @@ export function keychain() {
   return {
     get(account) {
       if (cache.has(account)) return cache.get(account);
-      let v = '';
-      try {
-        // 存的是 base64：security -w 遇到非 ASCII 会输出十六进制，统一编码就不用猜
-        v = Buffer.from(execFileSync('security', ['find-generic-password', '-s', SERVICE, '-a', account, '-w'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim(), 'base64').toString('utf8');
-      } catch (e) { if (e.status !== NOT_FOUND) throw new Error(`读取钥匙串失败：${e.message}`); }
+      let v = find(SERVICE, account);
+      if (!v && (v = find(OLD_SERVICE, account))) {
+        this.set(account, v);
+        spawnSync('security', ['delete-generic-password', '-s', OLD_SERVICE, '-a', account], { stdio: 'ignore' });
+      }
       cache.set(account, v);
       return v;
     },
