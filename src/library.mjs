@@ -200,8 +200,29 @@ const indexFile = (root) => join(root, 'node_modules/.cache/mori-studio/assets.j
 const readIndex = (root) => { try { return JSON.parse(readFileSync(indexFile(root), 'utf8')); } catch { return {}; } };
 const writeIndex = (root, idx) => { mkdirSync(dirname(indexFile(root)), { recursive: true }); writeFileSync(indexFile(root), JSON.stringify(idx)); };
 
-/** 图片移走、删掉后，索引里跟着改（map: 旧 → 新，新为 null 是删掉） */
+/* ───────────── 图床清单（src/assets/cdn.json，见 cdn.mjs） ───────────── */
+
+const manifestFile = (root) => join(root, 'src/assets/cdn.json');
+export const readManifest = (root) => { try { return JSON.parse(readFileSync(manifestFile(root), 'utf8')); } catch { return { base: '', images: {} }; } };
+export const writeManifest = (root, m) => writeFileSync(manifestFile(root), JSON.stringify({ base: m.base, images: Object.fromEntries(Object.entries(m.images).sort(([a], [b]) => a.localeCompare(b))) }, null, 2) + '\n');
+
+/** 图片移动后清单换键（外链不变，不用重新上传）；删掉的去掉 */
+function renameInManifest(root, map) {
+  if (!existsSync(manifestFile(root))) return;
+  const m = readManifest(root);
+  let dirty = false;
+  for (const [from, to] of map) {
+    if (!m.images[from]) continue;
+    if (to) m.images[to] = m.images[from];
+    delete m.images[from];
+    dirty = true;
+  }
+  if (dirty) writeManifest(root, m);
+}
+
+/** 图片移走、删掉后，查重索引和图床清单跟着改（map: 旧 → 新，新为 null 是删掉） */
 function forget(root, map) {
+  renameInManifest(root, map);
   const idx = readIndex(root);
   let dirty = false;
   for (const [from, to] of map) {
@@ -243,8 +264,8 @@ export async function indexAssets(root) {
     const f = abs(root, p);
     const st = statSync(f);
     const old = idx[p];
-    if (old && old.v === INDEX_V && old.size === st.size && old.mtime === Math.round(st.mtimeMs)) continue;
-    const e = { v: INDEX_V, size: st.size, mtime: Math.round(st.mtimeMs), sha: sha256(readFileSync(f)), ...(old?.orig ? { orig: old.orig } : {}) };
+    if (old && old.v === INDEX_V && old.size === st.size && old.mtime === st.mtimeMs) continue;
+    const e = { v: INDEX_V, size: st.size, mtime: st.mtimeMs, sha: sha256(readFileSync(f)), ...(old?.orig ? { orig: old.orig } : {}) };
     if (!p.toLowerCase().endsWith('.svg')) {
       try {
         const m = await sharp(f).metadata();

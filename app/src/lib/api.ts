@@ -19,8 +19,10 @@ export interface SaveResult {
   errors: Array<{ path: string; message: string }>;
   annotationWarnings?: Array<{ id: number; block: string; quote?: string }>;
 }
+/** 图床（S3 兼容对象存储）设置；密钥读回来是空的，hasSecret 表示填过，保存时留空表示不改 */
+export interface ImageHost { provider: string; endpoint: string; region: string; bucket: string; accessKeyId: string; secretAccessKey: string; prefix: string; publicBase: string; pathStyle: boolean; hasSecret?: boolean }
 /** 图片：path 是它在 src/assets 下的相对路径（posts/hello/IMG.jpg），folder 是所在文件夹（'' 是未归类） */
-export interface AssetInfo { path: string; folder: string; name: string; size: number; mtime: number; live?: boolean; width?: number; height?: number; usedBy: Array<{ kind: 'post' | 'page' | 'friends'; id: string; title: string }> }
+export interface AssetInfo { path: string; folder: string; name: string; size: number; mtime: number; live?: boolean; /** 设了图床时：已经传上去了 */ remote?: boolean; width?: number; height?: number; usedBy: Array<{ kind: 'post' | 'page' | 'friends'; id: string; title: string }> }
 export interface GitInfo { isRepo: boolean; top?: string; nested?: boolean; branch?: string; remotes?: Array<{ name: string; url: string }>; changed?: number; last?: string }
 /** 防垃圾规则（存在评论服务里）：屏蔽词、IP 段、网址、昵称 */
 /** 邮件提醒（存在评论服务里）。密码、Key 读回来是空的，has* 表示填过；保存时留空表示不改 */
@@ -105,7 +107,11 @@ export const api = {
   geocode: (q: string) => req<{ lnglat: [number, number]; name: string }>('GET', `/api/geocode?q=${encodeURIComponent(q)}`),
   exif: () => req<{ photos: number; withGps: number; stops: Array<{ lnglat: [number, number]; date?: string; count: number }> }>('GET', '/api/exif'),
 
-  assets: () => req<{ assets: AssetInfo[]; similar: string[][] }>('GET', '/api/assets'),
+  assets: () => req<{ assets: AssetInfo[]; similar: string[][]; host: { pending: number } | null }>('GET', '/api/assets'),
+  imageHost: () => req<{ host: Partial<ImageHost> | null; ready: boolean; pending: number }>('GET', '/api/image-host'),
+  saveImageHost: (host: ImageHost | null) => req<{ ok: true }>('PUT', '/api/image-host', host ?? { host: null }),
+  testImageHost: () => req<{ ok: true }>('POST', '/api/image-host/test'),
+  syncImageHost: (onChunk: (t: string) => void) => stream('/api/image-host/sync', onChunk),
   moveAssets: (paths: string[], folder: string) => req<{ ok: true; moved: Record<string, string> }>('POST', '/api/assets/move', { paths, folder }),
   mergeAssets: (keep: string, drops: string[]) => req<{ ok: true }>('POST', '/api/assets/merge', { keep, drops }),
   removeAsset: (path: string) => req<{ ok: true }>('DELETE', `/api/assets?path=${encodeURIComponent(path)}`),

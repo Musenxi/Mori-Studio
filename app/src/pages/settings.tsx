@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { api, type MailSettings, type SpamRules } from '@/lib/api';
+import { api, type ImageHost, type MailSettings, type SpamRules } from '@/lib/api';
+import { OptionSelect } from '@/components/option-select';
 import { useProject, useRefresh } from '@/lib/hooks';
 import { Field } from '@/components/field';
 import { Button } from '@/components/ui/button';
@@ -22,6 +23,18 @@ const PRESETS: Array<[string, string]> = [['#002fa7', '克莱因蓝'], ['#b0442b
 // 和主题里的推导一致：亮色下亮度封顶，暗色下亮度托底（都在 OKLCH 里，色相和饱和度不变）
 const light = (c: string) => `oklch(from ${c} min(l,.52) c h)`;
 const dark = (c: string) => `oklch(from ${c} max(l,.7) min(c,.18) h)`;
+
+/** 图床服务商：接口地址、区域的示例，存储桶写在路径里还是域名里 */
+const HOSTS: Record<string, { label: string; endpoint: string; region: string; pathStyle: boolean }> = {
+  r2: { label: 'Cloudflare R2', endpoint: 'https://<账号 ID>.r2.cloudflarestorage.com', region: 'auto', pathStyle: true },
+  oss: { label: '阿里云 OSS', endpoint: 'https://oss-cn-hangzhou.aliyuncs.com', region: 'oss-cn-hangzhou', pathStyle: false },
+  cos: { label: '腾讯云 COS', endpoint: 'https://cos.ap-guangzhou.myqcloud.com', region: 'ap-guangzhou', pathStyle: false },
+  qiniu: { label: '七牛云', endpoint: 'https://s3.cn-east-1.qiniucs.com', region: 'cn-east-1', pathStyle: false },
+  s3: { label: 'AWS S3', endpoint: 'https://s3.us-east-1.amazonaws.com', region: 'us-east-1', pathStyle: false },
+  custom: { label: '其他 S3 兼容', endpoint: 'https://', region: '', pathStyle: true },
+};
+const NO_HOST: ImageHost = { provider: 'off', endpoint: '', region: '', bucket: '', accessKeyId: '', secretAccessKey: '', prefix: '', publicBase: '', pathStyle: false };
+const hostForm = (h?: Partial<ImageHost> | null): ImageHost => (h ? { ...NO_HOST, ...h, secretAccessKey: '' } : NO_HOST);
 
 export default function Settings() {
   const { data: project } = useProject();
@@ -45,6 +58,10 @@ export default function Settings() {
   const [mail, setMail] = useState<MailSettings | null>(null);
   useEffect(() => { if (mailQ.data) setMail(mailQ.data.mail); }, [mailQ.data]);
   const [testing, setTesting] = useState(false);
+  const hostQ = useQuery({ queryKey: ['image-host'], queryFn: api.imageHost });
+  const [host, setHost] = useState<ImageHost>(NO_HOST);
+  useEffect(() => { if (hostQ.data) setHost(hostForm(hostQ.data.host)); }, [hostQ.data]);
+  const [hostTesting, setHostTesting] = useState(false);
   useEffect(() => { if (cfg) { setTitle(cfg.title); setDescription(cfg.description ?? ''); setAccent(cfg.accent); setAccentDark(cfg.accentDark ?? ''); setOverride(!!cfg.accentDark); } }, [cfg?.title, cfg?.description, cfg?.accent, cfg?.accentDark]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (cfg) setHead(cfg.head ?? ''); }, [cfg?.head]); // eslint-disable-line react-hooks/exhaustive-deps
   if (!cfg) return null;
@@ -56,7 +73,8 @@ export default function Settings() {
   const accentDarkNow = override ? accentDark : '';
   const spamDirty = !!(spam && spamQ.data && SPAM.some(([k]) => spamLines(spam[k]).join('\n') !== spamQ.data.spam[k].join('\n')));
   const mailDirty = !!(mail && mailQ.data && JSON.stringify(mail) !== JSON.stringify(mailQ.data.mail));
-  const dirty = mailDirty || spamDirty || (title && title !== cfg.title) || description !== (cfg.description ?? '') || accent !== cfg.accent || accentDarkNow !== (cfg.accentDark ?? '') || Object.keys(edits).length > 0 || autoN !== autosaveSeconds() || head.trim() !== (cfg.head ?? '');
+  const hostDirty = !!hostQ.data && JSON.stringify(host) !== JSON.stringify(hostForm(hostQ.data.host));
+  const dirty = hostDirty || mailDirty || spamDirty || (title && title !== cfg.title) || description !== (cfg.description ?? '') || accent !== cfg.accent || accentDarkNow !== (cfg.accentDark ?? '') || Object.keys(edits).length > 0 || autoN !== autosaveSeconds() || head.trim() !== (cfg.head ?? '');
 
   const save = async () => {
     setBusy(true);
@@ -77,6 +95,10 @@ export default function Settings() {
         const r = await api.setCommentSettings(Object.fromEntries(SPAM.map(([k]) => [k, spamLines(spam[k])])) as unknown as SpamRules);
         qc.setQueryData(['comment-settings'], r);
         setSpam(spamText(r.spam));
+      }
+      if (hostDirty) {
+        await api.saveImageHost(host.provider === 'off' ? null : host);
+        await qc.invalidateQueries({ queryKey: ['image-host'] });
       }
       setAutosaveSeconds(autoN); setAuto(String(autoN));
       setEdits({});
@@ -160,6 +182,19 @@ export default function Settings() {
           </Card></Section>
         )}
         {spamOn && mailQ.error && <p className="text-destructive">{(mailQ.error as Error).message}</p>}
+
+        <Section title="图床"><Card>
+          <HostFields host={host} set={setHost} />
+          {host.provider !== 'off' && (
+            <div className="pt-3">
+              <Button variant="secondary" size="sm" disabled={hostTesting || hostDirty || !hostQ.data?.ready} onClick={async () => {
+                setHostTesting(true);
+                try { await api.testImageHost(); toast.success('连接正常'); } catch (e) { toast.error((e as Error).message); }
+                setHostTesting(false);
+              }}>测试连接</Button>
+            </div>
+          )}
+        </Card></Section>
 
         <Section title="自定义代码"><Card>
           <Field label="<head>" hint="只在构建出的站点里生效，预览里没有。">
@@ -265,6 +300,31 @@ function MailFields({ mail, set, defaults }: { mail: MailSettings; set: (m: Mail
             <SwitchField checked={mail.notifyAuthor} label="新评论提醒我" onCheckedChange={(v) => put({ notifyAuthor: v })} />
             <SwitchField checked={mail.notifyReply} label="有人回复时提醒读者" onCheckedChange={(v) => put({ notifyReply: v })} />
           </div>
+        </>
+      )}
+    </>
+  );
+}
+
+function HostFields({ host, set }: { host: ImageHost; set: (h: ImageHost) => void }) {
+  const put = (patch: Partial<ImageHost>) => set({ ...host, ...patch });
+  const preset = HOSTS[host.provider];
+  return (
+    <>
+      <Field label="服务商">
+        <OptionSelect value={host.provider} onValueChange={(v) => put({ provider: v, ...(HOSTS[v] ? { pathStyle: HOSTS[v].pathStyle, region: host.region || HOSTS[v].region } : {}) })}
+          options={[{ value: 'off', label: '不用图床' }, ...Object.entries(HOSTS).map(([value, h]) => ({ value, label: h.label }))]} />
+      </Field>
+      {preset && (
+        <>
+          <Field label="接口地址"><Input value={host.endpoint} placeholder={preset.endpoint} onChange={(e) => put({ endpoint: e.target.value })} /></Field>
+          <Field label="区域"><Input value={host.region} placeholder={preset.region || 'auto'} onChange={(e) => put({ region: e.target.value })} /></Field>
+          <Field label="存储桶"><Input value={host.bucket} onChange={(e) => put({ bucket: e.target.value })} /></Field>
+          <Field label="Access Key ID"><Input value={host.accessKeyId} onChange={(e) => put({ accessKeyId: e.target.value })} /></Field>
+          <Field label="Secret"><Input type="password" value={host.secretAccessKey} placeholder={host.hasSecret ? '已填，留空不改' : undefined} onChange={(e) => put({ secretAccessKey: e.target.value })} /></Field>
+          <Field label="路径前缀"><Input value={host.prefix} placeholder="blog" onChange={(e) => put({ prefix: e.target.value })} /></Field>
+          <Field label="访问域名" hint="视频要能被站点读取：存储桶的跨域（CORS）设置里允许站点的域名。"><Input value={host.publicBase} placeholder="https://img.example.com" onChange={(e) => put({ publicBase: e.target.value })} /></Field>
+          {host.provider === 'custom' && <div className="pt-2"><SwitchField checked={host.pathStyle} label="存储桶写在路径里" onCheckedChange={(v) => put({ pathStyle: v })} /></div>}
         </>
       )}
     </>

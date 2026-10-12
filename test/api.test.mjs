@@ -125,3 +125,20 @@ test('来源校验：别的网站的写请求、被重绑定的域名都被拒�
   assert.equal(await status({ Origin: 'https://evil.example', Host: '127.0.0.1' }), 403);
   assert.equal(await status({}), 200);
 });
+
+test('图床设置：密钥只进不出、留空不改；地址要是网址；关掉就清除', async () => {
+  const h = { provider: 'r2', endpoint: 'https://acc.r2.cloudflarestorage.com', region: 'auto', bucket: 'b', accessKeyId: 'AK', secretAccessKey: 'SECRET', prefix: 'blog', publicBase: 'https://img.example.com', pathStyle: true };
+  assert.equal((await call('PUT', '/api/image-host', h)).status, 200);
+  let r = (await call('GET', '/api/image-host')).body;
+  assert.equal(r.ready, true);
+  assert.equal(r.host.hasSecret, true);
+  assert.equal(r.host.secretAccessKey, undefined);
+  assert.ok(!JSON.stringify(r).includes('SECRET'));
+  assert.equal((await call('PUT', '/api/image-host', { ...h, secretAccessKey: '', bucket: 'b2' })).status, 200);
+  r = (await call('GET', '/api/image-host')).body;
+  assert.equal(r.host.bucket, 'b2');
+  assert.equal(r.ready, true); // 密钥留空 = 不改
+  assert.equal((await call('PUT', '/api/image-host', { ...h, publicBase: 'img.example.com' })).status, 400);
+  assert.equal((await call('PUT', '/api/image-host', null)).status, 200);
+  assert.equal((await call('GET', '/api/image-host')).body.host, null);
+});

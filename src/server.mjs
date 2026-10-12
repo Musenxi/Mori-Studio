@@ -17,6 +17,7 @@ import { normalizeDoc } from 'astro-mori/flow';
 import { probeSite } from './probe.mjs';
 import { gitInfo, gitInit, publishGit, publishLocal } from './publish.mjs';
 import { HEIC_EXT, heicToJpeg, uprightJpeg, toWebMp4 } from './media.mjs';
+import { hostReady, pendingAssets, syncToHost, testHost } from './cdn.mjs';
 import { listAssets, saveAsset, liveVideo, assetUsage, trashAsset, moveAssets, mergeAssets, indexAssets, rememberOrigin, findSame, similarGroups, sha256, cleanRel, SHARED } from './library.mjs';
 import { parseGpx, simplify, readExif, clusterStops } from './geo.mjs';
 
@@ -157,6 +158,17 @@ export async function startStudio({ root, port = 4400, dev = false }) {
       const seen = readState().commentsSeenAt ?? 0;
       return { total: (st.pending ?? 0) + (st.approved ?? 0) + (st.hidden ?? 0), pending: st.pending ?? 0, unread: list.comments.filter((c) => c.createdAt > seen).length };
     } catch { return null; }
+  }
+
+  // 图床：设置存在 .mori-studio.json 的 imageHost（密钥只进不出）
+  const HOST_KEYS = ['provider', 'endpoint', 'region', 'bucket', 'accessKeyId', 'secretAccessKey', 'prefix', 'publicBase', 'pathStyle'];
+  const imageHost = () => readState().imageHost ?? null;
+  /** 构建前同步图床：没设置就跳过；失败只提示，不拦构建（没上传的图照旧用本地的） */
+  async function syncBeforeBuild(write) {
+    const host = imageHost();
+    if (!hostReady(host)) return;
+    write('▸ 同步图床\n');
+    try { const n = await syncToHost(root, host, (t) => write(`  ${t}`)); write(n ? `上传了 ${n} 张\n\n` : '没有要上传的\n\n'); } catch (e) { write(`同步图床失败：${e.message}\n没上传的图这次用本地的。\n\n`); }
   }
 
   const server = createServer(async (req, res) => {
@@ -391,7 +403,9 @@ export async function startStudio({ root, port = 4400, dev = false }) {
       if (req.method === 'GET' && p === '/api/assets') {
         const idx = await indexAssets(root);
         const assets = assetUsage(root, kindOf).map((a) => ({ ...a, width: idx[a.path]?.width, height: idx[a.path]?.height }));
-        return send(res, 200, { assets: assets.sort((a, b) => b.mtime - a.mtime), similar: similarGroups(idx) });
+        const host = imageHost();
+        const pending = hostReady(host) ? new Set(await pendingAssets(root, host)) : null;
+        return send(res, 200, { assets: assets.sort((a, b) => b.mtime - a.mtime).map((a) => (pending ? { ...a, remote: !pending.has(a.path) } : a)), similar: similarGroups(idx), host: pending ? { pending: pending.size } : null });
       }
       // 上传到某个文件夹：内容完全相同的图已经有了就不再存，直接用原来那张（dup: true）
       if (req.method === 'PUT' && p === '/api/assets/upload') {
@@ -439,6 +453,32 @@ export async function startStudio({ root, port = 4400, dev = false }) {
         try { trashAsset(root, url.searchParams.get('path')); return send(res, 200, { ok: true }); } catch (e) { return send(res, 400, { error: e.message }); }
       }
 
+      /* ── 图床 ── */
+      if (req.method === 'GET' && p === '/api/image-host') {
+        const h = imageHost();
+        const { secretAccessKey, ...rest } = h ?? {};
+        return send(res, 200, { host: h ? { ...rest, hasSecret: !!secretAccessKey } : null, ready: hostReady(h), pending: hostReady(h) ? (await pendingAssets(root, h)).length : 0 });
+      }
+      if (req.method === 'PUT' && p === '/api/image-host') {
+        try {
+          const b = await readJson(req);
+          if (b === null || b.host === null) { const { imageHost: _drop, ...st } = readState(); writeFileSync(tokenFile, JSON.stringify(st) + '\n', { mode: 0o600 }); return send(res, 200, { ok: true }); }
+          const next = Object.fromEntries(HOST_KEYS.map((k) => [k, typeof b[k] === 'string' ? b[k].trim() : b[k]]).filter(([, v]) => v !== undefined && v !== ''));
+          if (!next.secretAccessKey && imageHost()?.secretAccessKey) next.secretAccessKey = imageHost().secretAccessKey; // 留空 = 不改
+          for (const k of ['endpoint', 'publicBase']) if (next[k] && !/^https?:\/\/[^\s/]+/.test(next[k])) return send(res, 400, { error: `${k === 'endpoint' ? '接口地址' : '访问域名'}要以 http:// 或 https:// 开头` });
+          next.pathStyle = !!b.pathStyle;
+          writeState({ imageHost: next });
+          return send(res, 200, { ok: true });
+        } catch (e) { return send(res, 400, { error: e.message }); }
+      }
+      if (req.method === 'POST' && p === '/api/image-host/test') {
+        try { await testHost(imageHost()); return send(res, 200, { ok: true }); } catch (e) { return send(res, 400, { error: e.message }); }
+      }
+      if (req.method === 'POST' && p === '/api/image-host/sync') {
+        res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' });
+        try { const n = await syncToHost(root, imageHost(), (t) => res.write(t)); return res.end(`${n ? `上传了 ${n} 张` : '没有要上传的'}\n[exit 0]\n`); } catch (e) { return res.end(`${e.message}\n[exit 1]\n`); }
+      }
+
       /* ── 预览：用项目自己的 astro dev（真实主题渲染） ── */
       if (req.method === 'POST' && p === '/api/preview/start') {
         if (!(await isUp(preview.port))) {
@@ -465,6 +505,7 @@ export async function startStudio({ root, port = 4400, dev = false }) {
         const pipe = (child, done) => { child.stdout.on('data', (d) => res.write(d)); child.stderr.on('data', (d) => res.write(d)); child.on('error', (e) => { res.write(`${e.message}\n`); done(127); }); child.on('close', done); };
         const wasUp = await isUp(preview.port);
         const finish = async (text, code) => res.end(`${text}${await restartPreview(wasUp)}[exit ${code}]\n`);
+        await syncBeforeBuild((t) => res.write(t));
         res.write('▸ 构建\n');
         pipe(runAstro(['build'], { env: { ...process.env, FORCE_COLOR: '0' } }), async (code) => {
           if (code) return finish('\n构建失败，没有发布。\n', code);
@@ -482,6 +523,7 @@ export async function startStudio({ root, port = 4400, dev = false }) {
       if (req.method === 'POST' && p === '/api/build') {
         res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' });
         const wasUp = await isUp(preview.port);
+        await syncBeforeBuild((t) => res.write(t));
         const child = runAstro(['build'], { env: { ...process.env, FORCE_COLOR: '0' } });
         child.stdout.on('data', (d) => res.write(d));
         child.stderr.on('data', (d) => res.write(d));

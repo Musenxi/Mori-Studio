@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState, type DragEvent, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useSearchParams } from 'react-router';
-import { Check, FolderInput, Trash2, Upload, X } from 'lucide-react';
+import { Check, CloudUpload, FolderInput, Trash2, Upload, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { api, assetUrl, IMAGE_ACCEPT, isImageFile, type AssetInfo } from '@/lib/api';
 import { cn } from '@/lib/cn';
@@ -33,6 +33,7 @@ export default function Files() {
   const [sel, setSel] = useState<Set<string>>(new Set());
   const [over, setOver] = useState<string | null>(null); // 拖着的东西正在哪儿上面：'grid' 或某个文件夹
   const [busy, setBusy] = useState(false);
+  const [syncing, setSyncing] = useState(false);
   const input = useRef<HTMLInputElement>(null);
   const setView = (v: View) => { setParams(v === 'all' ? {} : { v }); setSel(new Set()); };
 
@@ -86,6 +87,17 @@ export default function Files() {
     if (!(await confirm({ title: '保留这张？', description: `其余 ${drops.length} 张的引用会改成这张，然后移进回收站。`, confirmLabel: '保留这张' }))) return;
     try { await api.mergeAssets(path, drops); await reload(); toast.success('已合并'); } catch (e) { toast.error((e as Error).message); }
   };
+  const sync = async () => {
+    setSyncing(true);
+    let out = '';
+    try {
+      const code = await api.syncImageHost((t) => { out = t; });
+      const last = out.trim().split('\n').filter((l) => !l.startsWith('[exit')).pop() ?? '';
+      if (code) toast.error(last); else toast.success(last);
+      await refetch();
+    } catch (e) { toast.error((e as Error).message); }
+    setSyncing(false);
+  };
   const toggle = (p: string) => setSel((s) => { const n = new Set(s); if (n.has(p)) n.delete(p); else n.add(p); return n; });
 
   // 拖动：卡片拖到左边的文件夹上是移动；电脑里的文件拖进来是上传
@@ -128,7 +140,7 @@ export default function Files() {
         <div className="mono truncate text-11-5" title={a.path}>{a.name}</div>
         <div className="mono truncate text-10-5 text-muted-foreground">
           {folder === null && <>{label(a.folder)} · </>}
-          {a.width && a.height ? `${a.width}×${a.height} · ` : ''}{size(a.size)}{a.live && ' · 实况'}
+          {a.width && a.height ? `${a.width}×${a.height} · ` : ''}{size(a.size)}{a.live && ' · 实况'}{a.remote === false && ' · 未上传'}
         </div>
         <div className="mt-0.5 truncate text-12">
           {a.usedBy.length === 0 ? <span className="text-muted-foreground">没被引用</span> : (
@@ -147,6 +159,7 @@ export default function Files() {
     <div className="min-h-full">
       <PageHeader title="文件" sub={`${all.length} 张`} actions={<>
         <input ref={input} type="file" accept={IMAGE_ACCEPT} multiple hidden onChange={(e) => { void upload([...(e.target.files ?? [])]); e.target.value = ''; }} />
+        {data?.host && <Button variant="secondary" onClick={() => void sync()} disabled={syncing || !data.host.pending}><CloudUpload size={14} />{syncing ? '同步中……' : data.host.pending ? `同步到图床（${data.host.pending}）` : '已同步到图床'}</Button>}
         <Button variant="default" onClick={() => input.current?.click()} disabled={busy || view === 'similar'}><Upload size={14} />{busy ? '上传中……' : '上传图片'}</Button>
       </>} />
       <div className="mx-auto flex max-w-320 animate-rise gap-8 px-10 pb-24 pt-4">
