@@ -55,6 +55,20 @@ export function useTheme() {
   return [theme, () => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))] as const;
 }
 
+/** 左上角：站点图标（和网站的 favicon 同一个）；没有或加载不出来就用刊名首字。标签页图标跟着换 */
+function SiteIcon() {
+  const { data: project } = useProject();
+  const stamp = project?.config.iconStamp ?? 0;
+  const [failed, setFailed] = useState(-1);
+  useEffect(() => {
+    if (!stamp) return;
+    const link = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
+    if (link) link.href = `/api/site-icon?v=${stamp}`;
+  }, [stamp]);
+  if (stamp && failed !== stamp) return <img src={`/api/site-icon?v=${stamp}`} alt="" className="h-9 w-9 shrink-0 rounded-11 object-cover" onError={() => setFailed(stamp)} />;
+  return <span className="serif grid h-9 w-9 shrink-0 place-items-center rounded-11 bg-primary text-16 text-primary-foreground">{[...(project?.config.title ?? 'M')][0]}</span>;
+}
+
 export function Sidebar({ onCompose, onSearch }: { onCompose: () => void; onSearch: () => void }) {
   const { data: project } = useProject();
   const { pathname } = useLocation();
@@ -67,7 +81,7 @@ export function Sidebar({ onCompose, onSearch }: { onCompose: () => void; onSear
   return (
     <aside className="flex h-full w-60 shrink-0 flex-col max-lg:w-14">
       <div className="flex items-center gap-3 px-3 pb-4 pt-3 max-lg:justify-center max-lg:px-0">
-        <span className="serif grid h-9 w-9 shrink-0 place-items-center rounded-11 bg-primary text-16 text-primary-foreground">{[...(project?.config.title ?? 'M')][0]}</span>
+        <SiteIcon />
         <div className="min-w-0 max-lg:hidden">
           <div className="truncate text-14-5 font-semibold leading-tight tracking-tight" title={project?.root}>{project?.config.title ?? 'Mori'}</div>
           <div className="mono mt-0.5 text-10-5 leading-none text-muted-foreground">Studio{project?.dev ? ' · dev' : ''}</div>

@@ -138,7 +138,7 @@ export function discardDraft(root, kind, id) {
 }
 
 /* ───────────── mori.config.ts 里的单行字符串设置 ───────────── */
-const CONFIG_KEYS = new Set(['title', 'description', 'accent', 'accentDark', 'editorNote', 'actionsLayout']);
+const CONFIG_KEYS = new Set(['title', 'icon', 'description', 'accent', 'accentDark', 'editorNote', 'actionsLayout']);
 /** 嵌套在 home / archive / feed 块里的设置：'home.style'、'home.direction'、'home.tocDirection'、'archive.direction'、'feed.content' */
 const BLOCK_KEYS = { 'home.style': ['quote', 'cover', 'list'], 'home.direction': ['h', 'v'], 'home.tocDirection': ['h', 'v'], 'archive.direction': ['h', 'v'], 'feed.content': ['excerpt', 'full'], 'comments.avatar': ['cravatar', 'gravatar', 'none'], 'comments.status': ['on', 'readonly', 'off'] };
 /** 块里的自由文字：空字符串就删掉这一行 */
@@ -155,8 +155,10 @@ export function setConfigValue(configPath, key, value) {
   if (key in BLOCK_KEYS || key in NUM_KEYS || STR_BLOCK_KEYS.has(key)) return setBlockValue(configPath, key, value);
   if (!CONFIG_KEYS.has(key)) throw new Error(`不支持修改 ${key}`);
   let src = readFileSync(configPath, 'utf8');
+  // 只认配置对象最外层那一级缩进的 key：嵌套对象里同名的（比如页头操作里的 icon: 'search'）不算；editorNote 本来就在 home: { } 里
+  const top = key === 'editorNote' ? '[ \\t]*' : src.match(/(?:defineMoriConfig\(\{|export default \{)[ \t]*\n(?:[ \t]*(?:\/\/.*)?\n)*([ \t]*)\S/)?.[1] ?? '  ';
   // 行尾允许有逗号和 // 注释，替换时原样保留
-  const line = new RegExp(`^([ \\t]*)${key}[ \\t]*:[ \\t]*(['"\`])(?:\\\\.|(?!\\2).)*\\2([ \\t]*,?)([ \\t]*\\/\\/.*)?$`, 'm');
+  const line = new RegExp(`^(${top})${key}[ \\t]*:[ \\t]*(['"\`])(?:\\\\.|(?!\\2).)*\\2([ \\t]*,?)([ \\t]*\\/\\/.*)?$`, 'm');
   if (value === null) {
     src = src.replace(new RegExp(line.source + '\\n?', 'm'), '');
   } else if (line.test(src)) {

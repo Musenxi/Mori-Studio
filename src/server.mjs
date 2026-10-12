@@ -3,7 +3,7 @@
  * 界面用 Preact + htm，不需要构建：/vendor/ 直接指向 node_modules 里的现成模块文件。
  */
 import { createServer } from 'node:http';
-import { createReadStream, existsSync, statSync, readFileSync, writeFileSync, utimesSync } from 'node:fs';
+import { createReadStream, existsSync, statSync, readFileSync, writeFileSync, utimesSync, mkdirSync, rmSync } from 'node:fs';
 import { join, extname, normalize, resolve, dirname, basename } from 'node:path';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
@@ -27,7 +27,7 @@ import { previewer } from './preview.mjs';
 const here = dirname(fileURLToPath(import.meta.url));
 const dist = process.env.MORI_STUDIO_DIST ?? join(here, '../dist'); // 界面：app/ 用 Vite 构建出来的静态文件（桌面版放在应用缓存里）
 const require = createRequire(import.meta.url);
-const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.json': 'application/json; charset=utf-8', '.svg': 'image/svg+xml', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp', '.avif': 'image/avif', '.gif': 'image/gif' };
+const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.json': 'application/json; charset=utf-8', '.svg': 'image/svg+xml', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp', '.avif': 'image/avif', '.gif': 'image/gif', '.ico': 'image/x-icon' };
 
 /** 只认本机的名字：防 DNS 重绑定（Host）和别的网站借你的浏览器来改文件、触发发布（Origin） */
 const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]', '::1']);
@@ -103,6 +103,16 @@ export async function startStudio({ root, port = 4400, dev = false }) {
   const runAstro = (args, opts = {}) => spawn(process.execPath, [astroBin(), ...args], { cwd: root, ...opts, env: childEnv(opts.env) });
 
   const isUp = async () => !!(await preview.url());
+
+  // 站点图标（mori.config.ts 的 icon）：预设的 SVG 在项目的主题里（astro-mori/site-icon），自己的图在 public/ 里。旧版主题没有这个模块，左上角就退回到刊名首字
+  const siteIcons = await import('astro-mori/site-icon').catch(() => null);
+  const ICON_EXT = new Set(['.svg', '.png', '.ico', '.jpg', '.jpeg', '.webp']);
+  function siteIconFile(icon = config.icon || siteIcons?.DEFAULT_ICON) {
+    if (!siteIcons || !icon) return null;
+    if (siteIcons.isPresetIcon(icon)) return fileURLToPath(siteIcons.presetIconUrl(icon));
+    const pub = join(root, 'public'), f = normalize(join(pub, String(icon)));
+    return f.startsWith(pub + '/') && existsSync(f) ? f : null;
+  }
 
   /**
    * 构建会动到 astro dev 也在用的缓存，预览可能因此出错。构建完如果预览服务开着，就让它重启。
@@ -223,7 +233,7 @@ export async function startStudio({ root, port = 4400, dev = false }) {
         const cn = await commentNumbers(); // 侧栏上的未读数量；评论服务连不上就当 0
         const pending = cn?.unread ?? 0;
         return send(res, 200, {
-          root, configPath, config: { title: config.title ?? 'Mori', description: config.description ?? '', accent: config.accent ?? '#002fa7', accentDark: config.accentDark, categories: config.categories ?? [], home: config.home, archive: config.archive, feed: config.feed, comments: config.comments?.provider === 'mori' ? { avatar: config.comments.avatar, status: config.comments.status ?? 'on' } : undefined, nav: config.nav ?? null, actions: config.actions ?? null, actionsLayout: config.actionsLayout === 'split' ? 'split' : 'merged', lang: config.lang ?? 'zh-CN', head: typeof config.head === 'string' ? config.head : '', author: config.author ?? {}, site: typeof config.site === 'string' ? config.site : '' },
+          root, configPath, config: { title: config.title ?? 'Mori', icon: config.icon || (siteIcons?.DEFAULT_ICON ?? null), iconStamp: (() => { const f = siteIconFile(); return f ? statSync(f).mtimeMs : 0; })(), iconPresets: siteIcons?.ICONS ?? [], description: config.description ?? '', accent: config.accent ?? '#002fa7', accentDark: config.accentDark, categories: config.categories ?? [], home: config.home, archive: config.archive, feed: config.feed, comments: config.comments?.provider === 'mori' ? { avatar: config.comments.avatar, status: config.comments.status ?? 'on' } : undefined, nav: config.nav ?? null, actions: config.actions ?? null, actionsLayout: config.actionsLayout === 'split' ? 'split' : 'merged', lang: config.lang ?? 'zh-CN', head: typeof config.head === 'string' ? config.head : '', author: config.author ?? {}, site: typeof config.site === 'string' ? config.site : '' },
           entries: listEntries(root), pages: listPages(root), assets: listAssets(root), dev, preview: { url: await preview.url() }, publish: config.publish ?? null, comments: { provider: config.comments?.provider ?? null, avatar: avatarTemplate(config.comments?.avatar), endpoint: commentsEndpoint(), hasToken: !!adminToken(), pending },
         });
       }
@@ -304,6 +314,29 @@ export async function startStudio({ root, port = 4400, dev = false }) {
         config = (await loadConfig(root)).config;
         await restartPreview(wasUp, true); // 预览开着就让它读新配置
         return send(res, 200, { ok: true, config });
+      }
+
+      /* ── 站点图标：GET 给图（?preset= 看某个预设）；PUT 上传自己的图，存成 public/icon.<扩展名> 并写进配置 ── */
+      if (req.method === 'GET' && p === '/api/site-icon') {
+        const f = siteIconFile(url.searchParams.get('preset') ?? undefined);
+        return f ? serveFile(res, f) : send(res, 404, { error: '没有站点图标' });
+      }
+      if (req.method === 'PUT' && p === '/api/site-icon') {
+        const ext = extname(url.searchParams.get('name') ?? '').toLowerCase();
+        if (!ICON_EXT.has(ext)) return send(res, 400, { error: '图标要是 SVG、PNG、ICO、JPG 或 WebP' });
+        if (!siteIcons) return send(res, 400, { error: '项目的主题版本太旧，还不支持站点图标' });
+        const body = await readBody(req, 5 * 1024 * 1024);
+        const wasUp = await isUp();
+        const pub = join(root, 'public');
+        mkdirSync(pub, { recursive: true });
+        // 以前上传的（public/icon.别的扩展名）删掉；用户自己放的别的文件不动
+        const old = /^\/icon\.[a-z]+$/.test(config.icon ?? '') ? join(pub, config.icon) : null;
+        writeFileSync(join(pub, `icon${ext}`), body);
+        if (old && old !== join(pub, `icon${ext}`)) rmSync(old, { force: true });
+        setConfigValue(configPath, 'icon', `/icon${ext}`);
+        config = (await loadConfig(root)).config;
+        await restartPreview(wasUp, true);
+        return send(res, 200, { ok: true, icon: config.icon });
       }
 
       let mm;

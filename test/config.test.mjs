@@ -21,6 +21,20 @@ test('替换已有的值，保留行尾注释和其余排版', () => {
   assert.equal(s.match(/title:/g).length, 1);
 });
 
+test('顶层 key 只认最外层：嵌套对象里同名的不动（站点图标 vs 页头操作的 icon）', () => {
+  const f = join(mkdtempSync(join(tmpdir(), 'mori-')), 'mori.config.ts');
+  writeFileSync(f, `export default defineMoriConfig({\n  title: 'x',\n  actions: [\n    {\n      type: 'link',\n      icon: 'search',\n    },\n  ],\n});\n`);
+  setConfigValue(f, 'icon', 'ink');
+  let s = readFileSync(f, 'utf8');
+  assert.match(s, /icon: 'search'/);
+  assert.match(s, /defineMoriConfig\(\{\n  icon: 'ink',\n/);
+  setConfigValue(f, 'icon', '/icon.png');
+  s = readFileSync(f, 'utf8');
+  assert.match(s, /^  icon: '\/icon\.png',$/m);
+  assert.match(s, /icon: 'search'/);
+  assert.equal(s.match(/icon:/g).length, 2);
+});
+
 test('没有的顶层 key 插到开头；null 删除', () => {
   const f = make();
   setConfigValue(f, 'accentDark', '#ff8866');

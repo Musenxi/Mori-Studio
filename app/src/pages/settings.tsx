@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { api, type ImageHost, type MailSettings, type SpamRules } from '@/lib/api';
@@ -43,6 +43,7 @@ export default function Settings() {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [head, setHead] = useState('');
+  const [icon, setIcon] = useState<string | null>(null);
   const [accent, setAccent] = useState('#002fa7');
   const [accentDark, setAccentDark] = useState('');
   const [override, setOverride] = useState(false);
@@ -62,6 +63,7 @@ export default function Settings() {
   const [host, setHost] = useState<ImageHost>(NO_HOST);
   useEffect(() => { if (hostQ.data) setHost(hostForm(hostQ.data.host)); }, [hostQ.data]);
   const [hostTesting, setHostTesting] = useState(false);
+  useEffect(() => { setIcon(cfg?.icon ?? null); }, [cfg?.icon]);
   useEffect(() => { if (cfg) { setTitle(cfg.title); setDescription(cfg.description ?? ''); setAccent(cfg.accent); setAccentDark(cfg.accentDark ?? ''); setOverride(!!cfg.accentDark); } }, [cfg?.title, cfg?.description, cfg?.accent, cfg?.accentDark]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (cfg) setHead(cfg.head ?? ''); }, [cfg?.head]); // eslint-disable-line react-hooks/exhaustive-deps
   if (!cfg) return null;
@@ -74,13 +76,14 @@ export default function Settings() {
   const spamDirty = !!(spam && spamQ.data && SPAM.some(([k]) => spamLines(spam[k]).join('\n') !== spamQ.data.spam[k].join('\n')));
   const mailDirty = !!(mail && mailQ.data && JSON.stringify(mail) !== JSON.stringify(mailQ.data.mail));
   const hostDirty = !!hostQ.data && JSON.stringify(host) !== JSON.stringify(hostForm(hostQ.data.host));
-  const dirty = hostDirty || mailDirty || spamDirty || (title && title !== cfg.title) || description !== (cfg.description ?? '') || accent !== cfg.accent || accentDarkNow !== (cfg.accentDark ?? '') || Object.keys(edits).length > 0 || autoN !== autosaveSeconds() || head.trim() !== (cfg.head ?? '');
+  const dirty = icon !== cfg.icon || mailDirty || spamDirty || (title && title !== cfg.title) || description !== (cfg.description ?? '') || accent !== cfg.accent || accentDarkNow !== (cfg.accentDark ?? '') || Object.keys(edits).length > 0 || autoN !== autosaveSeconds() || head.trim() !== (cfg.head ?? '');
 
   const save = async () => {
     setBusy(true);
     try {
       if (title && title !== cfg.title) await api.setConfig('title', title);
       if (description !== (cfg.description ?? '')) await api.setConfig('description', description);
+      if (icon && icon !== cfg.icon) await api.setConfig('icon', icon);
       if (accent !== cfg.accent) await api.setConfig('accent', accent);
       if (accentDarkNow !== (cfg.accentDark ?? '')) await api.setConfig('accentDark', accentDarkNow || null);
       for (const [k, v] of Object.entries(edits)) await api.setConfig(k, v);
@@ -108,6 +111,13 @@ export default function Settings() {
     setBusy(false);
   };
 
+  const iconInput = useRef<HTMLInputElement>(null);
+  const uploadIcon = async (f: File) => {
+    setBusy(true);
+    try { await api.uploadSiteIcon(f); await refresh(); } catch (e) { toast.error((e as Error).message); }
+    setBusy(false);
+  };
+
   return (
     <>
       <PageHeader title="设定" actions={<Button variant="default" onClick={() => void save()} disabled={busy || !dirty}>保存</Button>} />
@@ -116,6 +126,21 @@ export default function Settings() {
           <Field label="刊名"><Input value={title} onChange={(e) => setTitle(e.target.value)} /></Field>
           <Field label="简介"><Input value={description} onChange={(e) => setDescription(e.target.value)} /></Field>
         </Card></Section>
+
+        {cfg.icon !== null && (
+          <Section title="站点图标"><Card>
+            <div className="flex flex-wrap items-center gap-3">
+              {cfg.iconPresets.map(([id, label]) => (
+                <IconTile key={id} src={`/api/site-icon?preset=${id}`} label={label} selected={icon === id} onClick={() => setIcon(id)} />
+              ))}
+              {!cfg.iconPresets.some(([id]) => id === cfg.icon) && (
+                <IconTile src={`/api/site-icon?v=${cfg.iconStamp}`} label={cfg.icon ?? ''} selected={icon === cfg.icon} onClick={() => setIcon(cfg.icon)} />
+              )}
+              <Button onClick={() => iconInput.current?.click()} disabled={busy}>上传图片…</Button>
+              <input ref={iconInput} type="file" accept=".svg,.png,.ico,.jpg,.jpeg,.webp" hidden onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) void uploadIcon(f); }} />
+            </div>
+          </Card></Section>
+        )}
 
         <Section title="作者"><Card>
           <Field label="名字"><Input value={edits['author.name'] ?? cfg.author.name ?? ''} onChange={(e) => put('author.name', e.target.value)} /></Field>
@@ -231,6 +256,14 @@ export default function Settings() {
         </Card></Section>
       </Body>
     </>
+  );
+}
+
+function IconTile({ src, label, selected, onClick }: { src: string; label: string; selected: boolean; onClick: () => void }) {
+  return (
+    <button type="button" title={label} aria-label={label} onClick={onClick} className={cn('h-11 w-11 overflow-hidden rounded-xl outline-offset-2 transition-[outline-color,transform] hover:scale-105', selected ? 'outline outline-2 outline-foreground' : 'outline outline-1 outline-transparent hover:outline-muted-foreground')}>
+      <img src={src} alt="" className="h-full w-full object-cover" />
+    </button>
   );
 }
 

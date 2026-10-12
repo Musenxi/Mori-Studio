@@ -67,6 +67,12 @@ export const api = {
   removeEntry: (kind: Kind, id: string) => req<{ ok: true }>('DELETE', `/api/entry/${kind}/${id}`),
 
   setConfig: (key: string, value: string | null) => req('PUT', '/api/config', { key, value }),
+  uploadSiteIcon: async (file: File) => {
+    const r = await fetch(`/api/site-icon?name=${encodeURIComponent(file.name)}`, { method: 'PUT', body: file });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j.error ?? `上传失败（${r.status}）`);
+    return j as { icon: string };
+  },
   setCategories: (categories: unknown[], renames: Record<string, string>) => req<{ ok: true; moved: number }>('PUT', '/api/categories', { categories, renames }),
   renameTag: (from: string, to: string | null) => req<{ ok: true; changed: number }>('POST', '/api/tags/rename', { from, to }),
   setNav: (body: { nav?: NavItem[] | null; actions?: Action[] | null }) => req<{ ok: true }>('PUT', '/api/nav', body),

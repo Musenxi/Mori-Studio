@@ -36,6 +36,8 @@ export interface Project {
   dev: boolean;
   config: {
     title: string; description: string; accent: string; accentDark?: string; lang: string;
+    /** 站点图标：预设 id 或 public/ 里的地址；旧版主题没有是 null。iconStamp 是图标文件的修改时间，换了图就变 */
+    icon: string | null; iconStamp: number; iconPresets: Array<[string, string]>;
     categories: Category[];
     home?: { style?: 'quote' | 'cover' | 'list'; count?: number; direction?: 'h' | 'v'; tocDirection?: 'h' | 'v'; editorNote?: string };
     archive?: { direction?: 'h' | 'v' };
