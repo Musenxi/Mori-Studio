@@ -3,7 +3,8 @@
  * 不需要 git；“删除”是移进 .mori-trash/，不会真的删掉。
  */
 import { readdirSync, readFileSync, writeFileSync, existsSync, mkdirSync, renameSync, statSync, copyFileSync, rmSync } from 'node:fs';
-import { join, basename } from 'node:path';
+import { join, basename, relative } from 'node:path';
+import { recordTrash } from './trash.mjs';
 import { loadConfigFromFile } from 'vite';
 import { folderOf, retireFolder } from './library.mjs';
 
@@ -104,10 +105,16 @@ export function trashEntry(root, kind, id) {
   const trash = join(root, '.mori-trash');
   mkdirSync(trash, { recursive: true });
   const stamp = Date.now();
+  const title = (() => { try { return readEntry(root, kind, id).title; } catch { return ''; } })();
+  const files = [[`.mori-trash/${stamp}-${kind}-${id}.json`, relative(root, fileOf(root, kind, id))]];
   renameSync(fileOf(root, kind, id), join(trash, `${stamp}-${kind}-${id}.json`));
-  if (existsSync(pubFileOf(root, kind, id))) renameSync(pubFileOf(root, kind, id), join(trash, `${stamp}-${kind}-${id}.published.json`));
+  if (existsSync(pubFileOf(root, kind, id))) {
+    files.push([`.mori-trash/${stamp}-${kind}-${id}.published.json`, relative(root, pubFileOf(root, kind, id))]);
+    renameSync(pubFileOf(root, kind, id), join(trash, `${stamp}-${kind}-${id}.published.json`));
+  }
   // 它的图片文件夹：别处还在用的图移进共用，其余一起进回收站
-  retireFolder(root, folderOf(kind, id), kindOf, stamp);
+  const imgs = retireFolder(root, folderOf(kind, id), kindOf, stamp);
+  recordTrash(root, { key: `${stamp}-${kind}-${id}`, kind: kind === 'page' ? 'page' : 'post', label: title || id, files: [...files, ...(imgs?.files ?? [])], moved: imgs?.moved ?? [] });
 }
 
 /** 发布：取消草稿标记，正在写的版本成为已发布版本 */

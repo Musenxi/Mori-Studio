@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
-import { BookOpenText, CornerDownLeft, FileText, Files, Gauge, MessageSquare, PanelTop, Paperclip, PenLine, Search, Send, SlidersHorizontal, Tag, Users } from 'lucide-react';
+import { BookOpenText, CornerDownLeft, FileText, Files, Gauge, MessageSquare, PanelTop, Paperclip, PenLine, Search, Send, SlidersHorizontal, Tag, Trash2, Users } from 'lucide-react';
 import { cn } from '@/lib/cn';
 import { useProject } from '@/lib/hooks';
 
@@ -40,6 +40,7 @@ export function CommandPalette({ open, onOpenChange, onCompose }: { open: boolea
       { key: 'c-cm', group: '前往', label: '评论', icon: MessageSquare, run: go('/comments') },
       { key: 'c-files', group: '前往', label: '文件', icon: Paperclip, run: go('/files') },
       { key: 'c-fr', group: '前往', label: '友人帐', icon: Users, run: go('/friends') },
+      { key: 'c-trash', group: '前往', label: '回收站', icon: Trash2, run: go('/trash') },
       { key: 'c-pub', group: '前往', label: '构建发布', icon: Send, run: go('/publish') },
       { key: 'c-set', group: '前往', label: '设定', icon: SlidersHorizontal, run: go('/settings') },
     ];

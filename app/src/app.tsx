@@ -20,6 +20,7 @@ const Files = lazy(() => import('@/pages/files'));
 const Comments = lazy(() => import('@/pages/comments'));
 const Publish = lazy(() => import('@/pages/publish'));
 const Settings = lazy(() => import('@/pages/settings'));
+const Trash = lazy(() => import('@/pages/trash'));
 
 function Shell() {
   const { data: project, error, isPending } = useProject();
@@ -61,6 +62,7 @@ const router = createBrowserRouter([
       { path: '/comments', element: <Comments /> },
       { path: '/publish', element: <Publish /> },
       { path: '/settings', element: <Settings /> },
+      { path: '/trash', element: <Trash /> },
       { path: '*', element: <div className="grid h-full place-items-center text-muted-foreground">没有这个页面。</div> },
     ],
   },

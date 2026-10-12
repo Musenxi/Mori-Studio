@@ -81,7 +81,7 @@ export default function Files() {
   const remove = async (paths: string[]) => {
     const used = paths.filter((p) => byPath.get(p)?.usedBy.length).length;
     const one = paths.length === 1 ? byPath.get(paths[0])?.name : null;
-    if (!(await confirm({ title: one ? `删除 ${one}？` : `删除 ${paths.length} 张图片？`, description: used ? `有 ${used} 张正被内容使用，删掉之后那里会找不到图片、构建会报错。文件会保留在项目的回收站文件夹里。` : '文件会保留在项目的回收站文件夹里。', confirmLabel: '删除', danger: true }))) return;
+    if (!(await confirm({ title: one ? `删除 ${one}？` : `删除 ${paths.length} 张图片？`, description: used ? `有 ${used} 张正被内容使用，删掉之后那里会找不到图片、构建会报错。可以在回收站里还原。` : '可以在回收站里还原。', confirmLabel: '删除', danger: true }))) return;
     try { for (const p of paths) await api.removeAsset(p); setSel(new Set()); await reload(); toast.success('已删除'); } catch (e) { toast.error((e as Error).message); }
   };
   const keep = async (path: string, group: string[]) => {

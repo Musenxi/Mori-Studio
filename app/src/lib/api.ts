@@ -23,6 +23,8 @@ export interface SaveResult {
 export interface ImageHost { provider: string; endpoint: string; region: string; bucket: string; accessKeyId: string; secretAccessKey: string; prefix: string; publicBase: string; pathStyle: boolean; hasSecret?: boolean }
 /** 图片：path 是它在 src/assets 下的相对路径（posts/hello/IMG.jpg），folder 是所在文件夹（'' 是未归类） */
 export interface AssetInfo { path: string; folder: string; name: string; size: number; mtime: number; live?: boolean; /** 设了图床时：已经传上去了 */ remote?: boolean; width?: number; height?: number; usedBy: Array<{ kind: 'post' | 'page' | 'friends'; id: string; title: string }> }
+/** 回收站里的一项：files 是 [回收站里的路径, 原路径]，都相对项目根目录 */
+export interface TrashItem { key: string; kind: 'post' | 'page' | 'asset'; label: string; deletedAt: number; size: number; files: Array<[string, string]> }
 export interface GitInfo { isRepo: boolean; top?: string; nested?: boolean; branch?: string; remotes?: Array<{ name: string; url: string }>; changed?: number; last?: string }
 /** 防垃圾规则（存在评论服务里）：屏蔽词、IP 段、网址、昵称 */
 /** 邮件提醒（存在评论服务里）。密码、Key 读回来是空的，has* 表示填过；保存时留空表示不改 */
@@ -65,6 +67,10 @@ export const api = {
   unpublishEntry: (kind: Kind, id: string) => req<{ ok: true }>('POST', `/api/entry/${kind}/${id}/unpublish`),
   discardDraft: (kind: Kind, id: string) => req<{ ok: true; removed: boolean }>('POST', `/api/entry/${kind}/${id}/discard`),
   removeEntry: (kind: Kind, id: string) => req<{ ok: true }>('DELETE', `/api/entry/${kind}/${id}`),
+  trash: () => req<{ items: TrashItem[] }>('GET', '/api/trash'),
+  restoreTrash: (key: string) => req<{ ok: true; item: TrashItem }>('POST', '/api/trash/restore', { key }),
+  purgeTrash: (key: string) => req<{ ok: true }>('DELETE', `/api/trash?key=${encodeURIComponent(key)}`),
+  emptyTrash: () => req<{ ok: true }>('DELETE', '/api/trash'),
 
   setConfig: (key: string, value: string | null) => req('PUT', '/api/config', { key, value }),
   uploadSiteIcon: async (file: File) => {

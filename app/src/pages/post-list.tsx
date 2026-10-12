@@ -61,7 +61,7 @@ export default function PostList({ view }: { view: 'all' | 'draft' }) {
     try { await api.discardDraft(e.kind, e.id); await refresh(); toast.success('已删除草稿'); } catch (x) { toast.error((x as Error).message); }
   };
   const remove = async (e: EntrySummary) => {
-    if (!(await confirm({ title: `删除《${e.title}》？`, description: '文件不会彻底删除，会保留在项目的回收站文件夹里。', confirmLabel: '删除', danger: true }))) return;
+    if (!(await confirm({ title: `删除《${e.title}》？`, description: '可以在回收站里还原。', confirmLabel: '删除', danger: true }))) return;
     try { await api.removeEntry(e.kind, e.id); await refresh(); toast.success('已删除'); } catch (x) { toast.error((x as Error).message); }
   };
 

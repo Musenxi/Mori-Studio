@@ -12,8 +12,9 @@
  */
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs';
-import { basename, dirname, extname, join } from 'node:path';
+import { basename, dirname, extname, join, relative } from 'node:path';
 import sharp from 'sharp';
+import { recordTrash } from './trash.mjs';
 
 export const IMAGE_EXT = new Set(['.jpg', '.jpeg', '.png', '.webp', '.avif', '.gif', '.svg']);
 export const SHARED = 'shared';
@@ -160,8 +161,14 @@ export function trashAsset(root, rel) {
   mkdirSync(trash, { recursive: true });
   const stamp = `${Date.now()}-${rel.replaceAll('/', '_')}`;
   renameSync(abs(root, rel), join(trash, stamp));
+  const files = [[`.mori-trash/assets/${stamp}`, relative(root, abs(root, rel))]];
   const v = liveVideo(root, rel);
-  if (existsSync(v)) renameSync(v, join(trash, stamp.replace(/\.[^.]+$/, '.mp4')));
+  if (existsSync(v)) {
+    const vt = stamp.replace(/\.[^.]+$/, '.mp4');
+    files.push([`.mori-trash/assets/${vt}`, relative(root, v)]);
+    renameSync(v, join(trash, vt));
+  }
+  recordTrash(root, { key: stamp, kind: 'asset', label: rel, files });
   forget(root, new Map([[rel, null]]));
 }
 
@@ -179,7 +186,7 @@ export function mergeAssets(root, keep, drops) {
 
 /**
  * 文章删除时处理它的文件夹：被别的内容用到的图移进共用（引用跟着改），其余整个文件夹移进回收站。
- * 要在文章文件已经移走之后调用（这样它自己不算引用者）
+ * 要在文章文件已经移走之后调用（这样它自己不算引用者）。返回放进回收站的文件和挪去共用的图，给回收站记录用
  */
 export function retireFolder(root, folder, kindOf, stamp = Date.now()) {
   folder = cleanRel(folder, { folder: true });
@@ -187,11 +194,13 @@ export function retireFolder(root, folder, kindOf, stamp = Date.now()) {
   if (!existsSync(dir)) return;
   const inside = assetUsage(root, kindOf).filter((a) => a.folder === folder);
   const kept = inside.filter((a) => a.usedBy.length).map((a) => a.path);
-  if (kept.length) moveAssets(root, kept, SHARED);
+  const moved = kept.length ? [...moveAssets(root, kept, SHARED)] : [];
   const trash = join(root, '.mori-trash/assets');
   mkdirSync(trash, { recursive: true });
-  renameSync(dir, join(trash, `${stamp}-${folder.replaceAll('/', '_')}`));
+  const name = `${stamp}-${folder.replaceAll('/', '_')}`;
+  renameSync(dir, join(trash, name));
   forget(root, new Map(inside.map((a) => [a.path, null])));
+  return { files: [[`.mori-trash/assets/${name}`, relative(root, dir)]], moved };
 }
 
 /* ───────────── 查重索引 ───────────── */

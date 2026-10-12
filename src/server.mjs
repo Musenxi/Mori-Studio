@@ -24,6 +24,7 @@ import { commentsClient } from './comments.mjs';
 import { keychain, commentsAccount, imageHostAccount } from './secrets.mjs';
 import { previewer } from './preview.mjs';
 import { markRunning } from './running.mjs';
+import { listTrash, restoreTrash, purgeTrash, emptyTrash } from './trash.mjs';
 import { createMcpServer } from './mcp.mjs';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 
@@ -329,6 +330,24 @@ export async function startStudio({ root, port = 4400, dev = false }) {
         const { from, to } = await readJson(req);
         if (!from) return send(res, 400, { error: '缺少标签名' });
         return send(res, 200, { ok: true, changed: renameTag(root, from, to ? String(to).trim() : null) });
+      }
+
+      /* ── 回收站（见 trash.mjs）：列出、还原、彻底删除一项（?key=）、清空（不带 key） ── */
+      if (p === '/api/trash' && req.method === 'GET') return send(res, 200, { items: listTrash(root) });
+      if (p === '/api/trash/file' && req.method === 'GET') {
+        // 回收站里图片的缩略图（只给图片，不出回收站目录）
+        const dir = join(root, '.mori-trash'), f = normalize(join(root, url.searchParams.get('path') ?? ''));
+        if (!f.startsWith(dir + '/') || !IMAGE_EXT.has(extname(f).toLowerCase()) || !existsSync(f)) return send(res, 404, { error: 'not found' });
+        if (extname(f).toLowerCase() === '.svg') return serveFile(res, f);
+        res.writeHead(200, { 'Content-Type': 'image/webp', 'Cache-Control': 'no-store' });
+        return res.end(await sharp(f).rotate().resize({ width: 160, withoutEnlargement: true }).webp({ quality: 70 }).toBuffer());
+      }
+      if (p === '/api/trash/restore' && req.method === 'POST') {
+        try { return send(res, 200, { ok: true, item: restoreTrash(root, (await readJson(req)).key) }); } catch (e) { return send(res, 400, { error: e.message }); }
+      }
+      if (p === '/api/trash' && req.method === 'DELETE') {
+        const key = url.searchParams.get('key');
+        try { if (key) purgeTrash(root, key); else emptyTrash(root); return send(res, 200, { ok: true }); } catch (e) { return send(res, 400, { error: e.message }); }
       }
 
       /* ── 站点设置：改 mori.config.ts 里的单行字符串 ── */

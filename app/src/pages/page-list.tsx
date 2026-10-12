@@ -34,7 +34,7 @@ export default function PageList() {
     try { await api.discardDraft('page', p.id); await refresh(); toast.success('已删除草稿'); } catch (x) { toast.error((x as Error).message); }
   };
   const remove = async (p: PageSummary) => {
-    if (!(await confirm({ title: `删除页面「${p.title}」？`, description: '文件不会彻底删除，会保留在项目的回收站文件夹里。如果页头入口里有它，也请一并去掉。', confirmLabel: '删除', danger: true }))) return;
+    if (!(await confirm({ title: `删除页面「${p.title}」？`, description: '可以在回收站里还原。如果页头入口里有它，也请一并去掉。', confirmLabel: '删除', danger: true }))) return;
     try { await api.removeEntry('page', p.id); await refresh(); toast.success('已删除'); } catch (x) { toast.error((x as Error).message); }
   };
 

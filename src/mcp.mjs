@@ -174,10 +174,23 @@ export function createMcpServer(base) {
 
   server.registerTool('delete_entry', {
     title: '删除',
-    description: '删除一篇（移进项目的 .mori-trash/，可以手动找回）。调用前要得到用户明确同意。',
+    description: '删除一篇（连同它的图片文件夹移进回收站，可以用 restore_from_trash 还原）。调用前要得到用户明确同意。',
     inputSchema: { kind: KIND, id: ID },
     annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
   }, tool(async ({ kind, id }) => { await api('DELETE', `/api/entry/${kind}/${id}`); return text({ deleted: `${kind}/${id}` }); }));
+
+  server.registerTool('list_trash', {
+    title: '回收站',
+    description: '回收站里删掉的文章、页面、图片（新删的在前）：key、类型、名字、删除时间。',
+    annotations: read,
+  }, tool(async () => text((await api('GET', '/api/trash')).items.map(({ key, kind, label, deletedAt, files }) => ({ key, kind, label, deletedAt: new Date(deletedAt).toISOString(), from: files.map(([, o]) => o) })))));
+
+  server.registerTool('restore_from_trash', {
+    title: '从回收站还原',
+    description: '把回收站里的一项（list_trash 给的 key）放回原处。',
+    inputSchema: { key: z.string() },
+    annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+  }, tool(async ({ key }) => { const r = await api('POST', '/api/trash/restore', { key }); return text({ restored: r.item.label }); }));
 
   /* ── 图片 ── */
   server.registerTool('list_assets', {
