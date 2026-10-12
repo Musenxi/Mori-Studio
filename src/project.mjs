@@ -386,7 +386,7 @@ export function listPages(root) {
 }
 
 /** 页面的网址就是文件名，这些名字站点自己用了 */
-export const RESERVED_SLUGS = ['posts', 'archive', 'category', 'search', 'travels', 'feed', 'rss', '404', 'sitemap', 'robots', 'favicon', '_astro', 'api', 'live'];
+export const RESERVED_SLUGS = ['posts', 'archive', 'category', 'search', 'travels', 'feed', 'rss', '404', 'sitemap', 'robots', 'favicon', '_astro', 'api', 'live', 'map'];
 
 /* ───────────── 友人帐：src/content/friends.json ───────────── */
 
