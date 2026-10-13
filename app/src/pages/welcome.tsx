@@ -85,7 +85,7 @@ function CommentsStep({ onBack, onFinish }: { onBack: () => void; onFinish: () =
   const [key, setKey] = useState(project?.config.comments?.turnstileSiteKey ?? '');
   const [busy, setBusy] = useState(false);
   // 连上了：评论服务开了人机验证就还要填站点密钥，否则直接走完
-  const connected = (i: CommentsInfo) => (i.features.turnstile ? setInfo(i) : void onFinish());
+  const connected = (i?: CommentsInfo) => (i?.features.turnstile ? setInfo(i) : void onFinish());
   const done = async () => {
     setBusy(true);
     try {

@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
 import sharp from 'sharp';
 import { avatarTemplate } from 'astro-mori/avatar';
-import { RESERVED_SLUGS, loadConfig, setConfigValue, setCommentsEndpoint, checkCommentsEndpoint, setHead, setCategories, setPublish, setNav, setActions, listPages, readFriends, writeFriends, readFriendsLost, writeFriendsLost, formatFriends, parseFriends, renameCategoryInEntries, renameTag, countPages, listEntries, readEntry, writeEntry, entryExists, skeleton, trashEntry, publishEntry, unpublishEntry, discardDraft, kindOf, isId, KINDS, IMAGE_EXT } from './project.mjs';
+import { RESERVED_SLUGS, loadConfig, setConfigValue, setCommentsEndpoint, setThirdPartyComments, checkCommentsEndpoint, setHead, setCategories, setPublish, setNav, setActions, listPages, readFriends, writeFriends, readFriendsLost, writeFriendsLost, formatFriends, parseFriends, renameCategoryInEntries, renameTag, countPages, listEntries, readEntry, writeEntry, entryExists, skeleton, trashEntry, publishEntry, unpublishEntry, discardDraft, kindOf, isId, KINDS, IMAGE_EXT } from './project.mjs';
 import { validateEntry } from 'astro-mori/validate';
 import { locate } from 'astro-mori/anchor';
 import { normalizeDoc } from 'astro-mori/flow';
@@ -262,7 +262,7 @@ export async function startStudio({ root, port = 4400, dev = false }) {
         const pending = cn?.unread ?? 0;
         return send(res, 200, {
           root, configPath, config: { title: config.title ?? 'Mori', icon: config.icon || (siteIcons?.DEFAULT_ICON ?? null), iconStamp: (() => { const f = siteIconFile(); return f ? statSync(f).mtimeMs : 0; })(), iconPresets: siteIcons?.ICONS ?? [], description: config.description ?? '', accent: config.accent ?? '#002fa7', accentDark: config.accentDark, categories: config.categories ?? [], home: config.home, archive: config.archive, feed: config.feed, comments: config.comments?.provider === 'mori' ? { avatar: config.comments.avatar, status: config.comments.status ?? 'on', turnstileSiteKey: config.comments.turnstileSiteKey ?? '' } : undefined, nav: config.nav ?? null, actions: config.actions ?? null, actionsLayout: config.actionsLayout === 'split' ? 'split' : 'merged', lang: config.lang ?? 'zh-CN', head: typeof config.head === 'string' ? config.head : '', author: config.author ?? {}, site: typeof config.site === 'string' ? config.site : '' },
-          entries: listEntries(root), pages: listPages(root), assets: listAssets(root), dev, preview: { url: await preview.url() }, mcp: { command: stableNode(), args: [join(here, '../bin/mori-studio.mjs'), 'mcp', '--root', root], url: `http://127.0.0.1:${server.address().port}/mcp` }, publish: config.publish ?? null, comments: { provider: config.comments?.provider ?? null, avatar: avatarTemplate(config.comments?.avatar), endpoint: commentsEndpoint(), hasToken: !!commentsEndpoint() && !!adminToken(), pending }, welcome: !!readState().welcome,
+          entries: listEntries(root), pages: listPages(root), assets: listAssets(root), dev, preview: { url: await preview.url() }, mcp: { command: stableNode(), args: [join(here, '../bin/mori-studio.mjs'), 'mcp', '--root', root], url: `http://127.0.0.1:${server.address().port}/mcp` }, publish: config.publish ?? null, comments: { provider: config.comments?.provider ?? null, avatar: avatarTemplate(config.comments?.avatar), endpoint: commentsEndpoint(), hasToken: !!commentsEndpoint() && !!adminToken(), third: config.comments && config.comments.provider !== 'mori' ? config.comments : null, pending }, welcome: !!readState().welcome,
         });
       }
 
@@ -433,6 +433,15 @@ export async function startStudio({ root, port = 4400, dev = false }) {
             config = (await loadConfig(root)).config;
             await restartPreview(wasUp, true);
             return send(res, 200, { ok: true, info });
+          }
+          // 接入第三方评论：整块换掉 comments，不连它们的后台
+          if (mm[1] === 'connect' && req.method === 'POST') {
+            const b = await readJson(req);
+            const wasUp = await isUp();
+            try { setThirdPartyComments(configPath, b.provider, b.fields); } catch (e) { return send(res, 400, { error: e.message }); }
+            config = (await loadConfig(root)).config;
+            await restartPreview(wasUp, true);
+            return send(res, 200, { ok: true });
           }
           if (mm[2] && req.method === 'PATCH') return send(res, 200, await comments.setStatus(mm[2], (await readJson(req)).status));
           if (mm[2] && req.method === 'DELETE') return send(res, 200, await comments.remove(mm[2]));

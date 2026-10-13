@@ -144,6 +144,7 @@ export const api = {
   clearSpam: () => req<{ removed: number }>('DELETE', '/api/comments/spam'),
   setCommentToken: (token: string) => req('PUT', '/api/comments/token', { token }),
   connectComments: (endpoint: string, token: string) => req<{ ok: boolean; info: CommentsInfo }>('PUT', '/api/comments/connect', { endpoint, token }),
+  connectThirdComments: (provider: string, fields: Record<string, string>) => req<{ ok: boolean }>('POST', '/api/comments/connect', { provider, fields }),
   commentsInfo: () => req<CommentsInfo>('GET', '/api/comments/info'),
   welcomeDone: () => req('POST', '/api/welcome/done'),
   markCommentsSeen: () => req('POST', '/api/comments/seen'),

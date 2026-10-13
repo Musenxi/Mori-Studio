@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, writeFileSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { setConfigValue, setHead, setCommentsEndpoint } from '../src/project.mjs';
+import { setConfigValue, setHead, setCommentsEndpoint, setThirdPartyComments } from '../src/project.mjs';
 
 const make = () => {
   const f = join(mkdtempSync(join(tmpdir(), 'mori-')), 'mori.config.ts');
@@ -189,4 +189,19 @@ test('接入评论服务：没有评论块就新建；已是自建的只换地�
   src = readFileSync(g, 'utf8');
   assert.equal(src, `export default defineMoriConfig({\n  title: 'x',\n  comments: { provider: 'mori', endpoint: 'http://127.0.0.1:8787' },\n  lang: 'zh-CN',\n});\n`);
   for (const bad of ['', 'comments.example.com', 'ftp://x', 'https://x/?a=1']) assert.throws(() => setCommentsEndpoint(g, bad), /网址/);
+});
+
+test('接入第三方评论：整块换掉（自建的设置也不留）；必填要填、网址要是网址；site 可不填', () => {
+  const f = make();
+  setCommentsEndpoint(f, 'https://c.example.com');
+  setConfigValue(f, 'comments.avatar', 'gravatar');
+  setThirdPartyComments(f, 'disqus', { shortname: ' my-blog ' });
+  let src = readFileSync(f, 'utf8');
+  assert.match(src, /^  comments: \{ provider: 'disqus', shortname: 'my-blog' \},$/m);
+  assert.doesNotMatch(src, /avatar|endpoint/);
+  setThirdPartyComments(f, 'artalk', { server: 'https://a.example.com/', site: '' });
+  assert.match(readFileSync(f, 'utf8'), /comments: \{ provider: 'artalk', server: 'https:\/\/a\.example\.com' \},/);
+  assert.throws(() => setThirdPartyComments(f, 'giscus', { repo: 'a/b' }), /repoId/);
+  assert.throws(() => setThirdPartyComments(f, 'waline', { serverURL: 'waline' }), /网址/);
+  assert.throws(() => setThirdPartyComments(f, 'valine', {}), /不认识/);
 });

@@ -255,10 +255,42 @@ export function setCommentsEndpoint(configPath, endpoint) {
   endpoint = checkCommentsEndpoint(endpoint);
   const src = readFileSync(configPath, 'utf8');
   const open = src.match(/^([ \t]*)comments[ \t]*:[ \t]*\{/m);
-  const block = `comments: { provider: 'mori', endpoint: ${quote(endpoint)} },`;
   if (open) {
     const end = closeOf(src, open.index + open[0].length, '{', '}');
     if (/\bprovider[ \t]*:[ \t]*(['"`])mori\1/.test(src.slice(open.index, end))) return writeBlockValue(configPath, 'comments.endpoint', quote(endpoint));
+  }
+  replaceCommentsBlock(configPath, `comments: { provider: 'mori', endpoint: ${quote(endpoint)} },`);
+}
+
+/** 第三方评论要填的项：[键, 必填, 是不是网址] */
+export const THIRD_PARTY_FIELDS = {
+  giscus: [['repo', true], ['repoId', true], ['category', true], ['categoryId', true]],
+  waline: [['serverURL', true, true]],
+  twikoo: [['envId', true]],
+  artalk: [['server', true, true], ['site', false]],
+  disqus: [['shortname', true]],
+};
+
+/** 接入第三方评论：整块换掉 comments。只检查必填和网址的写法，连不连得通它们各自的后台才知道 */
+export function setThirdPartyComments(configPath, provider, fields = {}) {
+  const spec = THIRD_PARTY_FIELDS[provider];
+  if (!spec) throw new Error(`不认识的评论服务：${provider}`);
+  const parts = [`provider: ${quote(provider)}`];
+  for (const [key, required, isUrl] of spec) {
+    let v = String(fields[key] ?? '').trim();
+    if (!v) { if (required) throw new Error(`要填 ${key}`); continue; }
+    if (isUrl) v = checkCommentsEndpoint(v);
+    parts.push(`${key}: ${quote(v)}`);
+  }
+  replaceCommentsBlock(configPath, `comments: { ${parts.join(', ')} },`);
+}
+
+/** 换掉 mori.config.ts 里整个 comments 块；还没有就新建一个 */
+function replaceCommentsBlock(configPath, block) {
+  const src = readFileSync(configPath, 'utf8');
+  const open = src.match(/^([ \t]*)comments[ \t]*:[ \t]*\{/m);
+  if (open) {
+    const end = closeOf(src, open.index + open[0].length, '{', '}');
     writeFileSync(configPath, src.slice(0, open.index) + open[1] + block + src.slice(end).replace(/^[ \t]*,?/, ''));
     return;
   }
