@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { Link, useLocation, useMatch, useResolvedPath } from 'react-router';
-import { ChevronRight, Search, Files, FileText, Gauge, MessageSquare, Moon, PanelTop, Paperclip, PenLine, Send, SlidersHorizontal, Sun, Tag, Users, Eye, FilePen, BookOpenText, Trash2 } from 'lucide-react';
+import { ChevronRight, Search, Files, FileText, Gauge, MessageSquare, Moon, PanelTop, Paperclip, PenLine, Send, SlidersHorizontal, Sun, Tag, Users, Eye, FilePen, BookOpenText, Trash2, Plug } from 'lucide-react';
 import { cn } from '@/lib/cn';
 import { useProject } from '@/lib/hooks';
 import { Tip } from '@/components/tip';
@@ -114,6 +114,7 @@ export function Sidebar({ onCompose, onSearch }: { onCompose: () => void; onSear
         <Row to="/friends" icon={<Users size={ICON} />} label="友人帐" />
         <Row to="/trash" icon={<Trash2 size={ICON} />} label="回收站" />
         <div className="min-h-6 flex-1" />
+        <Row to="/mcp-clients" icon={<Plug size={ICON} />} label="MCP" />
         <Row to="/publish" icon={<Send size={ICON} />} label="构建发布" />
         <Row to="/settings" icon={<SlidersHorizontal size={ICON} />} label="设定" />
         <Row icon={theme === 'dark' ? <Sun size={ICON} /> : <Moon size={ICON} />} label={theme === 'dark' ? '切换到亮色' : '切换到暗色'} onClick={toggleTheme} />

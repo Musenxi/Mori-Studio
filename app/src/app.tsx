@@ -16,6 +16,7 @@ const Taxonomy = lazy(() => import('@/pages/taxonomy'));
 const PageList = lazy(() => import('@/pages/page-list'));
 const NavEditor = lazy(() => import('@/pages/nav-editor'));
 const Friends = lazy(() => import('@/pages/friends'));
+const Mcp = lazy(() => import('@/pages/mcp'));
 const Files = lazy(() => import('@/pages/files'));
 const Comments = lazy(() => import('@/pages/comments'));
 const Publish = lazy(() => import('@/pages/publish'));
@@ -63,6 +64,7 @@ const router = createBrowserRouter([
       { path: '/pages/:id', element: <Editor kind="page" /> },
       { path: '/nav', element: <NavEditor /> },
       { path: '/friends', element: <Friends /> },
+      { path: '/mcp-clients', element: <Mcp /> },
       { path: '/files', element: <Files /> },
       { path: '/comments', element: <Comments /> },
       { path: '/publish', element: <Publish /> },
