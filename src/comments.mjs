@@ -29,9 +29,9 @@ export function commentsClient({ endpoint, token }) {
 
   // /admin/info 按“地址 + 令牌”缓存；旧版服务没有这个接口（404），当作 api 0
   let infoCache = { key: '', info: null };
-  async function info() {
+  async function info({ fresh = false } = {}) {
     const key = `${endpoint()}\n${token()}`;
-    if (infoCache.key === key && infoCache.info) return infoCache.info;
+    if (!fresh && infoCache.key === key && infoCache.info) return infoCache.info;
     let i;
     try { i = await call('GET', '/info'); } catch (e) {
       if (e.code !== 404) throw e;

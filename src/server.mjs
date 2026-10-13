@@ -26,6 +26,7 @@ import { keychain, commentsAccount, imageHostAccount } from './secrets.mjs';
 import { previewer } from './preview.mjs';
 import { markRunning } from './running.mjs';
 import { addRecent, readRecent } from './recent.mjs';
+import { checkTheme, updateTheme, checkStudio, updateStudio, latestCommentVersion, compareVersions } from './updates.mjs';
 import { listTrash, restoreTrash, purgeTrash, emptyTrash } from './trash.mjs';
 import { createMcpServer } from './mcp.mjs';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
@@ -209,6 +210,21 @@ export async function startStudio({ root, port = 4400, dev = false }) {
     try { const n = await syncToHost(root, host, (t) => write(`  ${t}`)); write(n ? `上传了 ${n} 张\n\n` : '没有要上传的\n\n'); } catch (e) { write(`同步图床失败：${e.message}\n没上传的图这次用本地的。\n\n`); }
   }
 
+  /** 换一个 --root 把自己重新启动一遍（同一个端口）：切换站点、更新主题之后都要这样，Studio 的主题模块和界面是启动时才载入的 */
+  const studioDir = join(here, '..');
+  async function restartInto(to) {
+    const argv = process.argv.slice(1);
+    for (const [flag, value] of [['--root', to], ['--port', String(server.address().port)]]) {
+      const k = argv.indexOf(flag);
+      if (k >= 0) argv[k + 1] = value; else argv.push(flag, value);
+    }
+    await preview.stop().catch(() => {});
+    server.closeAllConnections();
+    await new Promise((r) => server.close(r));
+    spawn(process.execPath, [...process.execArgv, ...argv], { cwd: process.cwd(), env: process.env, detached: true, stdio: 'ignore' }).unref();
+    process.exit(0);
+  }
+
   const server = createServer(async (req, res) => {
     try {
       if (!requestAllowed(req)) return send(res, 403, { error: '不接受这个来源的请求：Studio 只给本机的页面用' });
@@ -270,18 +286,38 @@ export async function startStudio({ root, port = 4400, dev = false }) {
         try { await loadConfig(to); } catch { return send(res, 400, { error: '这个文件夹里没有 mori.config.ts' }); }
         addRecent(to);
         send(res, 200, { ok: true });
-        setTimeout(async () => {
-          const argv = process.argv.slice(1);
-          for (const [flag, value] of [['--root', to], ['--port', String(server.address().port)]]) {
-            const k = argv.indexOf(flag);
-            if (k >= 0) argv[k + 1] = value; else argv.push(flag, value);
-          }
-          await preview.stop().catch(() => {});
-          server.closeAllConnections();
-          await new Promise((r) => server.close(r));
-          spawn(process.execPath, [...process.execArgv, ...argv], { cwd: process.cwd(), env: process.env, detached: true, stdio: 'ignore' }).unref();
-          process.exit(0);
-        }, 100);
+        setTimeout(() => void restartInto(to), 100);
+        return;
+      }
+
+      /* ── 检查更新（用户在设定页手动点）：主题、评论服务 ── */
+      if (req.method === 'POST' && p === '/api/updates/check') {
+        const out = { theme: null, comments: null, studio: null };
+        try { out.studio = await checkStudio(studioDir, { desktop: process.env.MORI_STUDIO_PARENT === 'stdin' }); } catch (e) { out.studio = { error: e.message }; }
+        try { out.theme = await checkTheme(root); } catch (e) { out.theme = { error: e.message }; }
+        if (config.comments?.provider === 'mori') {
+          const c = { runtime: null, version: null, latest: null, outdated: false };
+          try { const i = await comments.info({ fresh: true }); c.version = i.version; c.runtime = i.runtime; } catch (e) { c.error = e.message; }
+          try { c.latest = await latestCommentVersion(); c.outdated = !!c.version && compareVersions(c.latest, c.version) > 0; } catch (e) { c.error ??= e.message; }
+          out.comments = c;
+        }
+        return send(res, 200, out);
+      }
+      if (req.method === 'POST' && p === '/api/updates/studio') {
+        try {
+          const r = await updateStudio(studioDir);
+          send(res, 200, { ok: true, ...r, restart: true });
+          setTimeout(() => void restartInto(root), 100);
+        } catch (e) { send(res, 400, { error: e.message }); }
+        return;
+      }
+      if (req.method === 'POST' && p === '/api/updates/theme') {
+        try {
+          const r = await updateTheme(root);
+          const restart = process.env.MORI_STUDIO_PARENT !== 'stdin';
+          send(res, 200, { ok: true, ...r, restart });
+          if (restart) setTimeout(() => void restartInto(root), 100);
+        } catch (e) { send(res, 400, { error: e.message }); }
         return;
       }
 

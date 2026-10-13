@@ -40,6 +40,11 @@ export interface MailSettings {
 export interface SpamRules { words: string[]; ips: string[]; urls: string[]; names: string[] }
 
 /** 评论服务的 /admin/info */
+export interface UpdateCheck {
+  studio: { version: string; latest: string; outdated: boolean; desktop: boolean; canUpdate: boolean } | { error: string } | null;
+  theme: { behind: number; commits: Array<{ hash: string; subject: string }> } | { error: string } | null;
+  comments: { version: string | null; latest: string | null; runtime: string | null; outdated: boolean; error?: string } | null;
+}
 export interface CommentsInfo { service: string; version: string | null; api: number; runtime: string | null; features: { turnstile?: boolean; mail?: string[]; online?: boolean } }
 
 export interface CommentRow { id: number; entry: string; name: string; avatar?: string | null; url?: string | null; email?: string | null; ip?: string | null; author?: boolean; body: string; createdAt: number; status: 'pending' | 'approved' | 'hidden' | 'spam'; block?: string | null; quote?: string | null; parentId?: number | null }
@@ -148,6 +153,9 @@ export const api = {
   projects: () => req<{ current: string; recent: Array<{ path: string; name: string }>; canSwitch: boolean }>('GET', '/api/projects'),
   switchProject: (root: string) => req<{ ok: boolean }>('POST', '/api/projects/switch', { root }),
   ping: () => req<{ root: string }>('GET', '/api/ping'),
+  checkUpdates: () => req<UpdateCheck>('POST', '/api/updates/check'),
+  updateStudio: () => req<{ ok: boolean; changed: number; installed: boolean; restart: boolean }>('POST', '/api/updates/studio'),
+  updateTheme: () => req<{ ok: boolean; changed: number; installed: boolean; restart: boolean }>('POST', '/api/updates/theme'),
   commentsInfo: () => req<CommentsInfo>('GET', '/api/comments/info'),
   welcomeDone: () => req('POST', '/api/welcome/done'),
   markCommentsSeen: () => req('POST', '/api/comments/seen'),

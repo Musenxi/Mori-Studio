@@ -11,6 +11,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Body, Card, PageHeader, Section } from '@/components/page';
 import { Segmented } from '@/components/segmented';
 import { SwitchField } from '@/components/switch-field';
+import { Updates } from '@/components/updates';
 import { CommentsConnect, THIRD_PARTY } from '@/components/comments-connect';
 import { cn } from '@/lib/cn';
 import { autosaveSeconds, setAutosaveSeconds } from '@/lib/prefs';
@@ -246,6 +247,8 @@ export default function Settings() {
             <Textarea variant="code" rows={6} spellCheck={false} value={head} onChange={(e) => setHead(e.target.value)} />
           </Field>
         </Card></Section>
+
+        <Section title="更新"><Card><Updates /></Card></Section>
 
         <Section title="MCP"><Card>
           <Field label="Claude 桌面版"><Snippet text={JSON.stringify({ mcpServers: { mori: { command: project.mcp.command, args: project.mcp.args } } }, null, 2)} /></Field>
