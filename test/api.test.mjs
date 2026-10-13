@@ -142,3 +142,40 @@ test('图床设置：密钥只进不出、留空不改；地址要是网址；�
   assert.equal((await call('PUT', '/api/image-host', null)).status, 200);
   assert.equal((await call('GET', '/api/image-host')).body.host, null);
 });
+
+test('接入评论服务：连不通不写配置；地址上不是评论服务、令牌不对都报出来；通了写进配置、令牌可留空沿用', async () => {
+  const { createServer } = await import('node:http');
+  const fake = createServer((req, res) => {
+    const json = (code, body) => { res.writeHead(code, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(body)); };
+    if (!req.url.startsWith('/c/admin/')) return json(404, { error: 'not found' });
+    if (req.headers.authorization !== 'Bearer good') return json(401, { error: '没有权限' });
+    if (req.url === '/c/admin/info') return json(200, { service: 'mori-comments', version: '0.0.1', api: 1, runtime: 'node', features: { turnstile: true } });
+    if (req.url.startsWith('/c/admin/stats')) return json(200, { pending: 1, approved: 2, hidden: 0 });
+    json(404, {});
+  });
+  await new Promise((ok) => fake.listen(0, '127.0.0.1', ok));
+  const ep = `http://127.0.0.1:${fake.address().port}`;
+  try {
+    const cfg = () => readFileSync(join(root, 'mori.config.ts'), 'utf8');
+    let r = await call('PUT', '/api/comments/connect', { endpoint: `${ep}/c`, token: 'bad' });
+    assert.equal(r.status, 400);
+    assert.match(r.body.error, /令牌不对/);
+    r = await call('PUT', '/api/comments/connect', { endpoint: ep, token: 'good' });
+    assert.equal(r.status, 400);
+    assert.match(r.body.error, /没有评论服务/);
+    r = await call('PUT', '/api/comments/connect', { endpoint: 'http://127.0.0.1:1', token: 'good' });
+    assert.equal(r.status, 502);
+    assert.match(r.body.error, /连不上/);
+    assert.doesNotMatch(cfg(), /comments/);
+    r = await call('PUT', '/api/comments/connect', { endpoint: `${ep}/c/`, token: 'good' });
+    assert.equal(r.status, 200);
+    assert.equal(r.body.info.features.turnstile, true);
+    assert.match(cfg(), new RegExp(`comments: \\{ provider: 'mori', endpoint: '${ep}/c' \\}`));
+    let p = (await call('GET', '/api/project')).body;
+    assert.equal(p.comments.hasToken, true);
+    assert.equal(p.comments.endpoint, `${ep}/c`);
+    r = await call('PUT', '/api/comments/connect', { endpoint: `${ep}/c`, token: '' });
+    assert.equal(r.status, 200);
+    assert.equal((await call('GET', '/api/comments/stats')).status, 200);
+  } finally { fake.close(); }
+});

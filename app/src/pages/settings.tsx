@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { api, type ImageHost, type MailSettings, type SpamRules } from '@/lib/api';
+import { ApiError, api, type ImageHost, type MailSettings, type SpamRules } from '@/lib/api';
 import { OptionSelect } from '@/components/option-select';
 import { useProject, useRefresh } from '@/lib/hooks';
 import { Field } from '@/components/field';
@@ -11,6 +11,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Body, Card, PageHeader, Section } from '@/components/page';
 import { Segmented } from '@/components/segmented';
 import { SwitchField } from '@/components/switch-field';
+import { CommentsConnect, THIRD_PARTY } from '@/components/comments-connect';
 import { cn } from '@/lib/cn';
 import { autosaveSeconds, setAutosaveSeconds } from '@/lib/prefs';
 
@@ -52,6 +53,9 @@ export default function Settings() {
   const [busy, setBusy] = useState(false);
   const qc = useQueryClient();
   const spamOn = project?.comments.provider === 'mori' && project.comments.hasToken;
+  const third = project?.comments.provider && project.comments.provider !== 'mori' ? (THIRD_PARTY[project.comments.provider] ?? project.comments.provider) : null;
+  const infoQ = useQuery({ queryKey: ['comment-info', project?.comments.endpoint], queryFn: api.commentsInfo, enabled: !!spamOn, retry: false });
+  const [changing, setChanging] = useState(false); // 正在更换评论服务的地址或令牌
   const spamQ = useQuery({ queryKey: ['comment-settings'], queryFn: api.commentSettings, enabled: !!spamOn, retry: false });
   const [spam, setSpam] = useState<Record<keyof SpamRules, string> | null>(null);
   useEffect(() => { if (spamQ.data) setSpam(spamText(spamQ.data.spam)); }, [spamQ.data]);
@@ -69,6 +73,7 @@ export default function Settings() {
   if (!cfg) return null;
   const rawAvatar = cfg.comments?.avatar;
   const avatarKey = rawAvatar == null || rawAvatar === '' ? 'cravatar' : rawAvatar; // 配置里是自定义地址时，三个选项都不亮
+  const turnstileKey = edits['comments.turnstileSiteKey'] ?? cfg.comments?.turnstileSiteKey ?? '';
 
   const put = (key: string, value: string) => setEdits((e) => ({ ...e, [key]: value }));
   const autoN = Math.min(3600, Math.max(1, Math.round(Number(auto)) || 60));
@@ -172,25 +177,40 @@ export default function Settings() {
           </Field>
         </Card></Section>
 
-        {project?.comments.provider === 'mori' && (
-          <Section title="评论"><Card>
-            <Field label="状态">
-              <Segmented value={edits['comments.status'] ?? cfg.comments?.status ?? 'on'} onValueChange={(v) => put('comments.status', v)} options={[{ value: 'on', label: '开启' }, { value: 'readonly', label: '禁用，显示历史评论' }, { value: 'off', label: '禁用，不显示' }]} />
+        <Section title="评论" hint={third ? `现在用的是 ${third}` : undefined}><Card>
+          {spamOn && !changing ? (
+            <Field label="服务">
+              <div className="flex min-h-9 items-center gap-3">
+                <span className="mono min-w-0 truncate">{project.comments.endpoint}</span>
+                {infoQ.data?.version && <span className="mono shrink-0 text-muted-foreground">v{infoQ.data.version}</span>}
+                <Button size="sm" className="ml-auto shrink-0" onClick={() => setChanging(true)}>更换</Button>
+              </div>
+              {infoQ.error && <p className="mt-1.5 text-destructive">{infoQ.error instanceof ApiError && infoQ.error.status === 401 ? '管理令牌不对，评论服务拒绝了。' : infoQ.error.message}</p>}
             </Field>
-            <Field label="头像服务">
-              <Segmented value={edits['comments.avatar'] ?? avatarKey} onValueChange={(v) => put('comments.avatar', v)} options={[{ value: 'cravatar', label: 'Cravatar' }, { value: 'gravatar', label: 'Gravatar' }, { value: 'none', label: '不显示' }]} />
-            </Field>
-            {!project.comments.hasToken
-              ? <p className="pt-2 text-soft-foreground">防垃圾规则要先在评论页填管理令牌。</p>
-              : spamQ.error
+          ) : <CommentsConnect key={project?.comments.endpoint} onDone={() => setChanging(false)} onCancel={changing ? () => setChanging(false) : undefined} />}
+          {project?.comments.provider === 'mori' && (
+            <>
+              <Field label="状态">
+                <Segmented value={edits['comments.status'] ?? cfg.comments?.status ?? 'on'} onValueChange={(v) => put('comments.status', v)} options={[{ value: 'on', label: '开启' }, { value: 'readonly', label: '禁用，显示历史评论' }, { value: 'off', label: '禁用，不显示' }]} />
+              </Field>
+              <Field label="头像服务">
+                <Segmented value={edits['comments.avatar'] ?? avatarKey} onValueChange={(v) => put('comments.avatar', v)} options={[{ value: 'cravatar', label: 'Cravatar' }, { value: 'gravatar', label: 'Gravatar' }, { value: 'none', label: '不显示' }]} />
+              </Field>
+              {(infoQ.data?.features.turnstile || cfg.comments?.turnstileSiteKey) && (
+                <Field label="Turnstile" hint={infoQ.data?.features.turnstile && !turnstileKey.trim() ? <span className="text-destructive">评论服务开了人机验证，没有站点密钥读者发不了评论。</span> : undefined}>
+                  <Input variant="mono" spellCheck={false} placeholder="站点密钥（Site Key）" value={turnstileKey} onChange={(e) => put('comments.turnstileSiteKey', e.target.value)} />
+                </Field>
+              )}
+              {spamQ.error
                 ? <p className="pt-2 text-destructive">{(spamQ.error as Error).message}</p>
                 : spam && SPAM.map(([k, label]) => (
                   <Field key={k} label={label}>
                     <Textarea rows={3} spellCheck={false} value={spam[k]} onChange={(e) => setSpam({ ...spam, [k]: e.target.value })} placeholder={k === 'ips' ? '1.2.3.4\n1.2.3.*\n10.0.0.0/8' : undefined} />
                   </Field>
                 ))}
-          </Card></Section>
-        )}
+            </>
+          )}
+        </Card></Section>
 
         {spamOn && mail && (
           <Section title="邮件提醒"><Card>

@@ -39,6 +39,9 @@ export interface MailSettings {
 
 export interface SpamRules { words: string[]; ips: string[]; urls: string[]; names: string[] }
 
+/** 评论服务的 /admin/info */
+export interface CommentsInfo { service: string; version: string | null; api: number; runtime: string | null; features: { turnstile?: boolean; mail?: string[]; online?: boolean } }
+
 export interface CommentRow { id: number; entry: string; name: string; avatar?: string | null; url?: string | null; email?: string | null; ip?: string | null; author?: boolean; body: string; createdAt: number; status: 'pending' | 'approved' | 'hidden' | 'spam'; block?: string | null; quote?: string | null; parentId?: number | null }
 
 /** 长任务（构建 / 发布）：输出一路推给 onChunk，结束时返回退出码 */
@@ -140,6 +143,8 @@ export const api = {
   removeComment: (id: number) => req('DELETE', `/api/comments/${id}`),
   clearSpam: () => req<{ removed: number }>('DELETE', '/api/comments/spam'),
   setCommentToken: (token: string) => req('PUT', '/api/comments/token', { token }),
+  connectComments: (endpoint: string, token: string) => req<{ ok: boolean; info: CommentsInfo }>('PUT', '/api/comments/connect', { endpoint, token }),
+  commentsInfo: () => req<CommentsInfo>('GET', '/api/comments/info'),
   markCommentsSeen: () => req('POST', '/api/comments/seen'),
 
   previewStart: () => req<{ url: string }>('POST', '/api/preview/start', {}),

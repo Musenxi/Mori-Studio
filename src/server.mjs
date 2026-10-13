@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
 import sharp from 'sharp';
 import { avatarTemplate } from 'astro-mori/avatar';
-import { RESERVED_SLUGS, loadConfig, setConfigValue, setHead, setCategories, setPublish, setNav, setActions, listPages, readFriends, writeFriends, readFriendsLost, writeFriendsLost, formatFriends, parseFriends, renameCategoryInEntries, renameTag, countPages, listEntries, readEntry, writeEntry, entryExists, skeleton, trashEntry, publishEntry, unpublishEntry, discardDraft, kindOf, isId, KINDS, IMAGE_EXT } from './project.mjs';
+import { RESERVED_SLUGS, loadConfig, setConfigValue, setCommentsEndpoint, checkCommentsEndpoint, setHead, setCategories, setPublish, setNav, setActions, listPages, readFriends, writeFriends, readFriendsLost, writeFriendsLost, formatFriends, parseFriends, renameCategoryInEntries, renameTag, countPages, listEntries, readEntry, writeEntry, entryExists, skeleton, trashEntry, publishEntry, unpublishEntry, discardDraft, kindOf, isId, KINDS, IMAGE_EXT } from './project.mjs';
 import { validateEntry } from 'astro-mori/validate';
 import { locate } from 'astro-mori/anchor';
 import { normalizeDoc } from 'astro-mori/flow';
@@ -261,8 +261,8 @@ export async function startStudio({ root, port = 4400, dev = false }) {
         const cn = await commentNumbers(); // 侧栏上的未读数量；评论服务连不上就当 0
         const pending = cn?.unread ?? 0;
         return send(res, 200, {
-          root, configPath, config: { title: config.title ?? 'Mori', icon: config.icon || (siteIcons?.DEFAULT_ICON ?? null), iconStamp: (() => { const f = siteIconFile(); return f ? statSync(f).mtimeMs : 0; })(), iconPresets: siteIcons?.ICONS ?? [], description: config.description ?? '', accent: config.accent ?? '#002fa7', accentDark: config.accentDark, categories: config.categories ?? [], home: config.home, archive: config.archive, feed: config.feed, comments: config.comments?.provider === 'mori' ? { avatar: config.comments.avatar, status: config.comments.status ?? 'on' } : undefined, nav: config.nav ?? null, actions: config.actions ?? null, actionsLayout: config.actionsLayout === 'split' ? 'split' : 'merged', lang: config.lang ?? 'zh-CN', head: typeof config.head === 'string' ? config.head : '', author: config.author ?? {}, site: typeof config.site === 'string' ? config.site : '' },
-          entries: listEntries(root), pages: listPages(root), assets: listAssets(root), dev, preview: { url: await preview.url() }, mcp: { command: stableNode(), args: [join(here, '../bin/mori-studio.mjs'), 'mcp', '--root', root], url: `http://127.0.0.1:${server.address().port}/mcp` }, publish: config.publish ?? null, comments: { provider: config.comments?.provider ?? null, avatar: avatarTemplate(config.comments?.avatar), endpoint: commentsEndpoint(), hasToken: !!adminToken(), pending },
+          root, configPath, config: { title: config.title ?? 'Mori', icon: config.icon || (siteIcons?.DEFAULT_ICON ?? null), iconStamp: (() => { const f = siteIconFile(); return f ? statSync(f).mtimeMs : 0; })(), iconPresets: siteIcons?.ICONS ?? [], description: config.description ?? '', accent: config.accent ?? '#002fa7', accentDark: config.accentDark, categories: config.categories ?? [], home: config.home, archive: config.archive, feed: config.feed, comments: config.comments?.provider === 'mori' ? { avatar: config.comments.avatar, status: config.comments.status ?? 'on', turnstileSiteKey: config.comments.turnstileSiteKey ?? '' } : undefined, nav: config.nav ?? null, actions: config.actions ?? null, actionsLayout: config.actionsLayout === 'split' ? 'split' : 'merged', lang: config.lang ?? 'zh-CN', head: typeof config.head === 'string' ? config.head : '', author: config.author ?? {}, site: typeof config.site === 'string' ? config.site : '' },
+          entries: listEntries(root), pages: listPages(root), assets: listAssets(root), dev, preview: { url: await preview.url() }, mcp: { command: stableNode(), args: [join(here, '../bin/mori-studio.mjs'), 'mcp', '--root', root], url: `http://127.0.0.1:${server.address().port}/mcp` }, publish: config.publish ?? null, comments: { provider: config.comments?.provider ?? null, avatar: avatarTemplate(config.comments?.avatar), endpoint: commentsEndpoint(), hasToken: !!commentsEndpoint() && !!adminToken(), pending },
         });
       }
 
@@ -388,7 +388,7 @@ export async function startStudio({ root, port = 4400, dev = false }) {
       let mm;
 
       /* ── 评论管理 ── */
-      if ((mm = m(/^\/api\/comments(?:\/(info|stats|token|seen|settings|spam|mail|mail\/test|(\d+)))?$/))) {
+      if ((mm = m(/^\/api\/comments(?:\/(info|stats|token|connect|seen|settings|spam|mail|mail\/test|(\d+)))?$/))) {
         try {
           if (!mm[1] && req.method === 'GET') { const q = (k) => url.searchParams.get(k); return send(res, 200, await comments.list({ status: q('status'), entry: q('entry'), since: q('since'), before: q('before'), limit: Math.min(300, +q('limit') || 300) })); }
           if (mm[1] === 'info' && req.method === 'GET') return send(res, 200, await comments.check());
@@ -412,6 +412,21 @@ export async function startStudio({ root, port = 4400, dev = false }) {
             const t = String(token ?? '').trim(), ep = commentsEndpoint();
             if (keys && ep) keys.set(commentsAccount(ep), t); else writeState({ adminToken: t });
             return send(res, 200, { ok: true });
+          }
+          // 接入评论服务：先用这个地址和令牌连一次，通了才写进 mori.config.ts、存令牌。令牌留空 = 沿用现在的
+          if (mm[1] === 'connect' && req.method === 'PUT') {
+            const b = await readJson(req);
+            let ep;
+            try { ep = checkCommentsEndpoint(b.endpoint); } catch (e) { return send(res, 400, { error: e.message }); }
+            const t = String(b.token ?? '').trim() || adminToken();
+            if (!t) return send(res, 400, { error: '要填管理令牌' });
+            const info = await commentsClient({ endpoint: () => ep, token: () => t }).verify();
+            const wasUp = await isUp();
+            try { setCommentsEndpoint(configPath, ep); } catch (e) { return send(res, 400, { error: e.message }); }
+            if (keys) keys.set(commentsAccount(ep), t); else writeState({ adminToken: t });
+            config = (await loadConfig(root)).config;
+            await restartPreview(wasUp, true);
+            return send(res, 200, { ok: true, info });
           }
           if (mm[2] && req.method === 'PATCH') return send(res, 200, await comments.setStatus(mm[2], (await readJson(req)).status));
           if (mm[2] && req.method === 'DELETE') return send(res, 200, await comments.remove(mm[2]));

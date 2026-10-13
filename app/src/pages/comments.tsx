@@ -9,9 +9,9 @@ import { avatarUrl } from 'astro-mori/avatar';
 import { useProject, useRefresh } from '@/lib/hooks';
 import { Button } from '@/components/ui/button';
 import { useConfirm } from '@/components/confirm';
-import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { Body, Empty, PageHeader } from '@/components/page';
+import { Body, Card, Empty, PageHeader, Section } from '@/components/page';
+import { CommentsConnect, THIRD_PARTY } from '@/components/comments-connect';
 import { Segmented } from '@/components/segmented';
 import { CommentBody } from '@/components/comment-body';
 
@@ -23,39 +23,21 @@ export default function Comments() {
   const { data: project } = useProject();
   const c = project?.comments;
   if (!c) return null;
-  if (c.provider !== 'mori') {
-    return (
-      <>
-        <PageHeader title="评论" />
-        <Body><p className="text-soft-foreground">没有启用自建评论。</p></Body>
-      </>
-    );
-  }
-  return c.hasToken ? <List /> : <Token />;
+  return c.provider === 'mori' && c.hasToken ? <List /> : <Connect />;
 }
 
-function Token({ wrong }: { wrong?: boolean }) {
+/** 还没接入评论服务（或令牌被拒）：填地址和管理令牌 */
+function Connect({ wrong }: { wrong?: boolean }) {
   const { data: project } = useProject();
-  const refresh = useRefresh();
-  const [token, setToken] = useState('');
   const c = project!.comments;
-  const local = /^https?:\/\/(127\.0\.0\.1|localhost)(:|\/|$)/.test(c.endpoint);
-  const save = async (v: string) => { try { await api.setCommentToken(v); await refresh(); } catch (e) { toast.error((e as Error).message); } };
+  const third = c.provider && c.provider !== 'mori' ? (THIRD_PARTY[c.provider] ?? c.provider) : null;
   return (
     <>
-      <PageHeader title="评论" sub="管理令牌" />
+      <PageHeader title="评论" />
       <Body>
-        {local ? (
-          <div className="mb-6">
-            <p className="mono text-muted-foreground">{c.endpoint}</p>
-            <Button variant="default" className="mt-3" onClick={() => save('dev-token')}>使用 dev-token</Button>
-          </div>
-        ) : <p className="mono mb-6 text-muted-foreground">{c.endpoint}</p>}
-        {wrong && <p className="mb-4 rounded-lg bg-muted px-3.5 py-2.5 text-destructive">令牌不对，评论服务拒绝了。{local && '如果你是自己用别的令牌启动的服务，请填那个。'}</p>}
-        <form className="flex max-w-md gap-2" onSubmit={(e) => { e.preventDefault(); if (token) void save(token); }}>
-          <Input type="password" value={token} onChange={(e) => setToken(e.target.value)} placeholder="管理令牌" />
-          <Button type="submit" disabled={!token}>保存</Button>
-        </form>
+        <Section title="评论服务" hint={third ? `现在用的是 ${third}` : undefined}>
+          <Card><CommentsConnect key={String(wrong)} error={wrong ? '管理令牌不对，评论服务拒绝了。' : ''} /></Card>
+        </Section>
       </Body>
     </>
   );
@@ -75,7 +57,7 @@ function List() {
 
   // 打开这一页就算“看过了”：未读数清零
   useEffect(() => { if (list.isSuccess) void api.markCommentsSeen().then(refresh).catch(() => {}); }, [list.isSuccess]); // eslint-disable-line react-hooks/exhaustive-deps
-  if (list.error instanceof ApiError && list.error.status === 401) return <Token wrong />;
+  if (list.error instanceof ApiError && list.error.status === 401) return <Connect wrong />;
 
   const reload = async () => { await Promise.all([qc.invalidateQueries({ queryKey: ['comments'] }), qc.invalidateQueries({ queryKey: ['comment-stats'] }), refresh()]); };
   const act = async (fn: () => Promise<unknown>) => { try { await fn(); await reload(); } catch (e) { toast.error((e as Error).message); } };

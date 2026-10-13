@@ -149,7 +149,7 @@ const CONFIG_KEYS = new Set(['title', 'icon', 'description', 'accent', 'accentDa
 /** 嵌套在 home / archive / feed 块里的设置：'home.style'、'home.direction'、'home.tocDirection'、'archive.direction'、'feed.content' */
 const BLOCK_KEYS = { 'home.style': ['quote', 'cover', 'list'], 'home.direction': ['h', 'v'], 'home.tocDirection': ['h', 'v'], 'archive.direction': ['h', 'v'], 'feed.content': ['excerpt', 'full'], 'comments.avatar': ['cravatar', 'gravatar', 'none'], 'comments.status': ['on', 'readonly', 'off'] };
 /** 块里的自由文字：空字符串就删掉这一行 */
-const STR_BLOCK_KEYS = new Set(['author.name', 'author.email', 'author.url']);
+const STR_BLOCK_KEYS = new Set(['author.name', 'author.email', 'author.url', 'comments.turnstileSiteKey']);
 /** 数字取值的设置：[最小, 最大]，写进文件时不带引号 */
 const NUM_KEYS = { 'home.count': [1, 8] };
 const quote = (v) => `'${String(v).replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\n/g, '\\n')}'`;
@@ -185,7 +185,6 @@ export function setConfigValue(configPath, key, value) {
  * key 在块里没有就加进去；整个块都没有就新建一个。value 只能是允许的几个值之一。
  */
 function setBlockValue(configPath, dotted, value) {
-  const [block, key] = dotted.split('.');
   let lit; // 写进文件的字面量：字符串带引号，数字不带
   if (dotted in NUM_KEYS) {
     const [min, max] = NUM_KEYS[dotted], n = Number(value);
@@ -199,6 +198,12 @@ function setBlockValue(configPath, dotted, value) {
     if (!BLOCK_KEYS[dotted].includes(value)) throw new Error(`${dotted} 只能是 ${BLOCK_KEYS[dotted].join(' / ')}`);
     lit = `'${value}'`;
   }
+  writeBlockValue(configPath, dotted, lit);
+}
+
+/** 把块里的一项写成字面量 lit（null 删掉）；见 setBlockValue */
+function writeBlockValue(configPath, dotted, lit) {
+  const [block, key] = dotted.split('.');
   let src = readFileSync(configPath, 'utf8');
   const open = src.match(new RegExp(`^([ \\t]*)${block}[ \\t]*:[ \\t]*\\{`, 'm'));
   // 评论的块自己带着服务地址等设置，不能凭空新建一个只有头像的 comments
@@ -229,6 +234,37 @@ function setBlockValue(configPath, dotted, value) {
   else if (body.includes('\n')) next = `\n${open[1]}  ${key}: ${lit},${body}`;   // 多行：加在块的开头
   else next = ` ${key}: ${lit},${body.replace(/^\s*/, ' ')}`;                       // 单行：加在 { 后面
   writeFileSync(configPath, src.slice(0, from) + next + src.slice(end));
+}
+
+/* ───────────── 自建评论服务：mori.config.ts 里的 comments ───────────── */
+
+/** 评论服务的地址：http(s) 网址，去掉结尾的 / */
+export function checkCommentsEndpoint(v) {
+  const s = String(v ?? '').trim().replace(/\/+$/, '');
+  let u = null;
+  try { u = new URL(s); } catch { /* 下面报错 */ }
+  if (!u || !/^https?:$/.test(u.protocol) || u.search || u.hash) throw new Error('评论服务的地址要是 http:// 或 https:// 开头的网址');
+  return s;
+}
+
+/**
+ * 接入自建评论服务。已经是 provider: 'mori' 的评论块只换 endpoint，头像、开关这些设置不动；
+ * 用的是第三方评论（giscus 等）就整块换掉；还没有评论块就新建一个。
+ */
+export function setCommentsEndpoint(configPath, endpoint) {
+  endpoint = checkCommentsEndpoint(endpoint);
+  const src = readFileSync(configPath, 'utf8');
+  const open = src.match(/^([ \t]*)comments[ \t]*:[ \t]*\{/m);
+  const block = `comments: { provider: 'mori', endpoint: ${quote(endpoint)} },`;
+  if (open) {
+    const end = closeOf(src, open.index + open[0].length, '{', '}');
+    if (/\bprovider[ \t]*:[ \t]*(['"`])mori\1/.test(src.slice(open.index, end))) return writeBlockValue(configPath, 'comments.endpoint', quote(endpoint));
+    writeFileSync(configPath, src.slice(0, open.index) + open[1] + block + src.slice(end).replace(/^[ \t]*,?/, ''));
+    return;
+  }
+  const top = src.match(/(defineMoriConfig\(\{|export default \{)[ \t]*\n/);
+  if (!top) throw new Error('没在 mori.config.ts 里找到配置对象的开头，请手动添加 comments。');
+  writeFileSync(configPath, src.replace(top[0], `${top[0]}  ${block}\n`));
 }
 
 /* ───────────── 自定义 <head> 代码：mori.config.ts 里的 head ───────────── */

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, writeFileSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { setConfigValue, setHead } from '../src/project.mjs';
+import { setConfigValue, setHead, setCommentsEndpoint } from '../src/project.mjs';
 
 const make = () => {
   const f = join(mkdtempSync(join(tmpdir(), 'mori-')), 'mori.config.ts');
@@ -166,4 +166,27 @@ test('作者：没有 author 块就新建；改、加、清空一项；全清空
   assert.equal((await read()).title, 'MORI');
   setConfigValue(f, 'author.url', ''); // 没有块时清空：什么都不做
   assert.equal(readFileSync(f, 'utf8'), s);
+});
+
+test('接入评论服务：没有评论块就新建；已是自建的只换地址、其余设置不动；第三方的整块换掉；地址要是网址', () => {
+  const f = make();
+  setCommentsEndpoint(f, 'https://c.example.com/');
+  assert.match(readFileSync(f, 'utf8'), /^  comments: \{ provider: 'mori', endpoint: 'https:\/\/c\.example\.com' \},$/m);
+  setConfigValue(f, 'comments.avatar', 'gravatar');
+  setConfigValue(f, 'comments.turnstileSiteKey', '0x4AAA');
+  setCommentsEndpoint(f, 'https://new.example.com/_comments');
+  let src = readFileSync(f, 'utf8');
+  assert.match(src, /endpoint: 'https:\/\/new\.example\.com\/_comments'/);
+  assert.match(src, /avatar: 'gravatar'/);
+  assert.match(src, /turnstileSiteKey: '0x4AAA'/);
+  assert.equal(src.match(/endpoint/g).length, 1);
+  setConfigValue(f, 'comments.turnstileSiteKey', '');
+  assert.doesNotMatch(readFileSync(f, 'utf8'), /turnstileSiteKey/);
+
+  const g = join(mkdtempSync(join(tmpdir(), 'mori-')), 'mori.config.ts');
+  writeFileSync(g, `export default defineMoriConfig({\n  title: 'x',\n  comments: {\n    provider: 'giscus', repo: 'a/b', // 注释里的 } 不算\n    category: 'C',\n  },\n  lang: 'zh-CN',\n});\n`);
+  setCommentsEndpoint(g, 'http://127.0.0.1:8787');
+  src = readFileSync(g, 'utf8');
+  assert.equal(src, `export default defineMoriConfig({\n  title: 'x',\n  comments: { provider: 'mori', endpoint: 'http://127.0.0.1:8787' },\n  lang: 'zh-CN',\n});\n`);
+  for (const bad of ['', 'comments.example.com', 'ftp://x', 'https://x/?a=1']) assert.throws(() => setCommentsEndpoint(g, bad), /网址/);
 });

@@ -12,7 +12,12 @@ export function commentsClient({ endpoint, token }) {
     const ep = endpoint(), tk = token();
     if (!ep) throw Object.assign(new Error('mori.config.ts 里没有启用自建评论（comments.provider = mori）'), { code: 400 });
     if (!tk) throw Object.assign(new Error('还没有管理令牌'), { code: 401 });
-    const r = await fetch(`${ep}/admin${path}`, { method, headers: { Authorization: `Bearer ${tk}`, 'Content-Type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body), signal: AbortSignal.timeout(8000) });
+    let r;
+    try {
+      r = await fetch(`${ep}/admin${path}`, { method, headers: { Authorization: `Bearer ${tk}`, 'Content-Type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body), signal: AbortSignal.timeout(8000) });
+    } catch (e) {
+      throw Object.assign(new Error(e.name === 'TimeoutError' ? '评论服务没有响应' : `连不上评论服务（${e.cause?.code ?? e.message}）`), { code: 502 });
+    }
     const j = await r.json().catch(() => ({}));
     if (!r.ok) throw Object.assign(new Error(j.error ?? `评论服务返回 ${r.status}`), { code: r.status === 401 ? 401 : r.status === 404 ? 404 : 502 });
     return j;
@@ -41,6 +46,18 @@ export function commentsClient({ endpoint, token }) {
     if (i.api > API_VERSION) throw Object.assign(new Error(`评论服务的接口（${i.api}）比 Studio 新，请更新 Studio`), { code: 409 });
     return i;
   }
+  /** 接入前的检查：比 check 多确认这个地址上真有评论服务（旧版服务没有 /info，任何 404 的网站也会被当成旧版） */
+  async function verify() {
+    try {
+      const i = await check();
+      if (!i.api) await call('GET', '/stats');
+      return i;
+    } catch (e) {
+      if (e.code === 401) throw Object.assign(new Error('管理令牌不对'), { code: 400 });
+      if (e.code === 404) throw Object.assign(new Error('这个地址上没有评论服务'), { code: 400 });
+      throw e;
+    }
+  }
 
   /** 一页：{ comments, next }；旧版服务没有 next */
   const list = ({ status, entry, since, before, limit = 100 } = {}) =>
@@ -65,7 +82,7 @@ export function commentsClient({ endpoint, token }) {
   }
 
   return {
-    call, info, check, list, listAll, numbers,
+    call, info, check, verify, list, listAll, numbers,
     stats: () => call('GET', '/stats'),
     traffic: () => call('GET', '/traffic'),
     reply: (c) => call('POST', '/comments', c),
