@@ -14,6 +14,15 @@ node bin/mori-studio.mjs --root 博客项目目录
 --dev         # 开发模式：构建后自动重启预览，发布目标里多一个“本地文件夹”
 ```
 
+还没有博客项目：
+
+```bash
+node bin/mori-studio.mjs create 新文件夹 [--repo 主题仓库] [--branch main] [--registry https://registry.npmmirror.com]
+node bin/mori-studio.mjs install --root 博客项目目录 [--registry …]   # 只装依赖
+```
+
+`create` 从主题模板仓库下载（有 git 就克隆，远端叫 `template`，以后 `pnpm theme:update` 从它拉主题更新；没有 git 就下 GitHub 的压缩包），再装依赖（有 pnpm 用 pnpm，没有用 npm）。代理照常用 `https_proxy` 环境变量。第一次用 Studio 打开新建的站点时，会先走一遍引导：刊名、作者，接入评论服务。
+
 改界面：`MORI_ROOT=博客项目目录 pnpm dev:ui`（热更新，接口转发给本机的 Studio）。测试：`MORI_THEME=主题仓库目录 pnpm test`。
 
 ## MCP
@@ -51,7 +60,7 @@ pnpm desktop          # 编译并打开窗口
 pnpm desktop:build    # 本机打包（.app、.dmg）
 ```
 
-要先装 Rust（`brew install rustup && rustup default stable`）。桌面版是 Tauri 写的壳：启动页选项目（最近打开的记在应用设置里），给项目起一个 Studio 服务（随机端口），窗口直接打开它；菜单“项目 → 打开项目…”（⌘O）回到启动页。`mori-studio-desktop 项目目录` 直接打开。
+要先装 Rust（`brew install rustup && rustup default stable`）。桌面版是 Tauri 写的壳：启动页新建站点（下载主题、装依赖，走的是上面的 `create`；位置、主题仓库、分支、依赖源、代理记在应用设置里）或打开文件夹（还没装依赖的先装，空文件夹就在里面新建），给项目起一个 Studio 服务（随机端口），窗口直接打开它；网页里新窗口打开的链接交给系统浏览器；菜单“项目 → 打开项目…”（⌘O）回到启动页。`mori-studio-desktop 项目目录` 直接打开。
 
 - 用本机的 Node（从登录 shell 里找，nvm、Homebrew 装的都行）；`MORI_NODE` 可以指定。
 - 打包时 `desktop/scripts/stage-studio.mjs` 把 Studio 的代码和运行依赖放进应用（`Contents/Resources/studio`）；开发时直接用仓库里的。

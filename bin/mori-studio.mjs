@@ -2,6 +2,9 @@
 /**
  *   mori-studio [--root 站点项目目录] [--port 4400] [--dev]
  *   mori-studio mcp [--root 站点项目目录]：MCP（stdio），给 Claude 桌面版这类客户端用。这个项目有 Studio 在跑就连过去，没有就自己起一个（不带界面）
+ *   mori-studio create <目录> [--repo 主题仓库] [--branch main] [--registry 依赖源] [--json]：下载主题新建站点，装好依赖
+ *   mori-studio install [--root 站点项目目录] [--registry 依赖源] [--json]：给站点装依赖
+ *     --json：进度一行一个 JSON（桌面版的启动页读它）
  *   MORI_STUDIO_PARENT=stdin：标准输入关了就退出（桌面版用）
  *   MORI_STUDIO_DIST=目录：界面构建到哪里（默认 dist/；桌面版每个项目一份）
  *   --dev（或环境变量 MORI_STUDIO_DEV=1）：开发模式。构建后自动重启预览用的 astro dev，发布目标里多一个“本地文件夹”。不加就是正常运行。
@@ -57,7 +60,35 @@ async function mcp(project) {
   process.stdin.on('end', () => process.exit(0)); // 客户端断开；自己起的 Studio 会让进程一直挂着，所以要主动退
 }
 
-try {
+/** create / install：进度打印出来；--json 时一行一个 JSON，出错也是 { error } */
+async function setup(cmd) {
+  const json = args.includes('--json');
+  const { createSite, installDeps } = await import('../src/create.mjs');
+  const STEPS = { download: '下载主题', install: '安装依赖' };
+  const onEvent = (e) => {
+    if (json) return console.log(JSON.stringify(e));
+    if (e.log) console.log(`  ${e.log}`);
+    else if (e.state === 'start') console.log(`▸ ${STEPS[e.step]}`);
+  };
+  // 桌面版取消（或退出）时关掉标准输入：停下正在跑的 git / pnpm，新建了一半的站点删掉
+  const ac = new AbortController();
+  if (process.env.MORI_STUDIO_PARENT === 'stdin') { process.stdin.on('end', () => ac.abort()); process.stdin.resume(); }
+  try {
+    const registry = opt('registry'), signal = ac.signal;
+    let root;
+    if (cmd === 'create') root = await createSite({ dir: args[1]?.startsWith('--') ? '' : args[1], repo: opt('repo'), branch: opt('branch'), registry, onEvent, signal });
+    else await installDeps((root = resolve(opt('root', process.cwd()))), { registry, onEvent, signal });
+    // 标准输入还开着，要主动退；输出到管道是异步的，写完再退
+    if (json) process.stdout.write(JSON.stringify({ done: true, root }) + '\n', () => process.exit(0));
+    else process.stdout.write(`\n完成：${root}\n`, () => process.exit(0));
+  } catch (e) {
+    if (json) process.stdout.write(JSON.stringify({ error: e.message, cancelled: e.name === 'AbortError' || undefined }) + '\n', () => process.exit(1));
+    else process.stderr.write(`失败：${e.message}\n`, () => process.exit(1));
+  }
+}
+
+if (args[0] === 'create' || args[0] === 'install') await setup(args[0]);
+else try {
   const project = resolve(opt('root', process.cwd()));
   if (args[0] === 'mcp') {
     useTheme(project);

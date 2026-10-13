@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
-import { createBrowserRouter, Outlet, RouterProvider, ScrollRestoration } from 'react-router';
+import { createBrowserRouter, Navigate, Outlet, RouterProvider, ScrollRestoration, useLocation } from 'react-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Sidebar } from '@/components/sidebar';
 import { CommandPalette } from '@/components/command-palette';
@@ -21,17 +21,22 @@ const Comments = lazy(() => import('@/pages/comments'));
 const Publish = lazy(() => import('@/pages/publish'));
 const Settings = lazy(() => import('@/pages/settings'));
 const Trash = lazy(() => import('@/pages/trash'));
+const Welcome = lazy(() => import('@/pages/welcome'));
 
 function Shell() {
   const { data: project, error, isPending } = useProject();
   const [compose, setCompose] = useState(false);
   const [palette, setPalette] = useState(false);
+  const { pathname } = useLocation();
 
   // 站点自己的主题色也是 Studio 的强调色
   useEffect(() => { if (project?.config.accent) document.documentElement.style.setProperty('--brand-base', project.config.accent); }, [project?.config.accent]);
 
   if (error) return <div className="grid h-full place-items-center px-6 text-center text-muted-foreground">{(error as Error).message}</div>;
   if (isPending) return <div className="grid h-full place-items-center text-muted-foreground">读取项目……</div>;
+  // 新建的站点先走引导；引导页没有侧栏
+  if (project.welcome && pathname !== '/welcome') return <Navigate to="/welcome" replace />;
+  if (pathname === '/welcome') return <Suspense fallback={null}><Outlet /></Suspense>;
   return (
     <div className="flex h-full gap-1 p-2">
       <Sidebar onCompose={() => setCompose(true)} onSearch={() => setPalette(true)} />
@@ -63,6 +68,7 @@ const router = createBrowserRouter([
       { path: '/publish', element: <Publish /> },
       { path: '/settings', element: <Settings /> },
       { path: '/trash', element: <Trash /> },
+      { path: '/welcome', element: <Welcome /> },
       { path: '*', element: <div className="grid h-full place-items-center text-muted-foreground">没有这个页面。</div> },
     ],
   },

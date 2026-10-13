@@ -5,89 +5,428 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Mori Studio</title>
 <style>
-  :root { --bg: #fafafa; --fg: #171717; --muted: #737373; --line: #e5e5e5; --hover: #f0f0f0; --danger: #b91c1c; color-scheme: light dark; }
-  @media (prefers-color-scheme: dark) { :root { --bg: #171717; --fg: #fafafa; --muted: #a3a3a3; --line: #2e2e2e; --hover: #232323; --danger: #f87171; } }
+  /* 颜色和 Studio 界面一致（app/src/index.css） */
+  :root { --bg: #fbfbfa; --fg: #1b1b19; --soft: #565650; --muted: #8e8e87; --line: rgb(27 27 25 / .08); --input: #f2f2f0; --input-hover: #e9e9e6; --hover: rgb(27 27 25 / .05); --danger: #b3402f; color-scheme: light dark; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #181817; --fg: #ededea; --soft: #a6a6a0; --muted: #6e6e68; --line: rgb(255 255 255 / .08); --input: #222220; --input-hover: #2c2c2a; --hover: rgb(237 237 234 / .06); --danger: #e58c78; } }
   * { box-sizing: border-box; }
-  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); font: 14px/1.5 -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif; -webkit-user-select: none; user-select: none; }
-  main { max-width: 520px; margin: 0 auto; padding: 18vh 24px 48px; }
-  h1 { font-size: 15px; font-weight: 600; margin: 0 0 24px; }
-  ul { list-style: none; margin: 0 0 20px; padding: 0; border-top: 1px solid var(--line); }
-  li { display: flex; align-items: center; border-bottom: 1px solid var(--line); }
-  li button.open { flex: 1; min-width: 0; text-align: left; padding: 10px 8px; background: none; border: 0; color: inherit; font: inherit; cursor: default; }
-  li button.open:hover:not(:disabled) { background: var(--hover); }
-  li button.open:disabled { opacity: .45; }
-  .name { display: block; font-weight: 500; }
-  .path { display: block; color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl; text-align: left; }
-  li button.forget { visibility: hidden; padding: 6px 10px; background: none; border: 0; color: var(--muted); font: inherit; font-size: 16px; line-height: 1; cursor: default; }
-  li:hover button.forget { visibility: visible; }
-  li button.forget:hover { color: var(--fg); }
-  .pick { padding: 7px 14px; border: 1px solid var(--line); border-radius: 6px; background: none; color: inherit; font: inherit; cursor: default; }
-  .pick:hover:not(:disabled) { background: var(--hover); }
-  #status { margin-top: 16px; color: var(--muted); white-space: pre-wrap; -webkit-user-select: text; user-select: text; }
-  #status.error { color: var(--danger); }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); font: 13.5px/1.5 -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei UI", sans-serif; -webkit-user-select: none; user-select: none; -webkit-font-smoothing: antialiased; }
+  main { max-width: 540px; margin: 0 auto; padding: 16vh 24px 64px; }
+  section { animation: rise .35s cubic-bezier(.2, .7, .2, 1); }
+  section[hidden], details[hidden] { display: none; }
+  @keyframes rise { from { opacity: 0; transform: translateY(6px); } }
+  h1 { font-size: 15px; font-weight: 600; margin: 0 0 24px; letter-spacing: -.01em; }
+  .mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 12px; }
+  .muted { color: var(--muted); }
+  .path { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl; text-align: left; }
+  button { font: inherit; color: inherit; cursor: default; }
+  .btn { height: 32px; padding: 0 14px; border: 0; border-radius: 7px; background: var(--hover); transition: background-color .15s, opacity .15s; }
+  .btn:hover:not(:disabled) { background: var(--input-hover); }
+  .btn.primary { background: var(--fg); color: var(--bg); }
+  .btn.primary:hover:not(:disabled) { background: var(--fg); opacity: .85; }
+  .btn.ghost { background: none; color: var(--soft); }
+  .btn.ghost:hover:not(:disabled) { background: var(--hover); color: var(--fg); }
+  .btn.small { height: 28px; padding: 0 10px; font-size: 12.5px; }
+  .btn:disabled { opacity: .45; }
+  .actions { display: flex; gap: 8px; margin-top: 24px; }
+  .back { display: inline-flex; align-items: center; gap: 4px; margin: -4px 0 14px -8px; padding: 4px 8px; border: 0; border-radius: 6px; background: none; color: var(--muted); font-size: 12.5px; }
+  .back:hover { background: var(--hover); color: var(--fg); }
+  .error { color: var(--danger); white-space: pre-wrap; -webkit-user-select: text; user-select: text; }
+  .error:empty { display: none; }
+  a { color: inherit; text-underline-offset: 2px; text-decoration-color: color-mix(in srgb, currentColor 35%, transparent); }
+  a:hover { text-decoration-color: currentColor; }
+
+  /* 最近打开 */
+  #recent { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--line); }
+  #recent li { display: flex; align-items: center; border-bottom: 1px solid var(--line); }
+  #recent .open { flex: 1; min-width: 0; text-align: left; padding: 10px 8px; background: none; border: 0; transition: background-color .15s; }
+  #recent .open:hover:not(:disabled) { background: var(--hover); }
+  #recent .open:disabled { opacity: .45; }
+  #recent .name { display: block; font-weight: 500; }
+  #recent .path { display: block; font-size: 12px; }
+  #recent .forget { visibility: hidden; padding: 6px 10px; background: none; border: 0; color: var(--muted); font-size: 16px; line-height: 1; }
+  #recent li:hover .forget { visibility: visible; }
+  #recent .forget:hover { color: var(--fg); }
+  #env { margin: 20px 0 0; }
+  #env a, #env button { margin-left: 10px; }
+  #env button { padding: 0; border: 0; background: none; text-decoration: underline; text-underline-offset: 2px; text-decoration-color: color-mix(in srgb, currentColor 35%, transparent); }
+  #status { margin-top: 16px; }
+
+  /* 表单：左边标签，右边控件 */
+  .form { display: grid; grid-template-columns: 76px minmax(0, 1fr); align-items: center; gap: 10px 16px; }
+  .form > label { color: var(--soft); }
+  .form .hide { display: none; }
+  input[type=text] { width: 100%; height: 32px; padding: 0 10px; border: 1px solid transparent; border-radius: 7px; background: var(--input); color: inherit; font: inherit; outline: none; transition: background-color .15s, border-color .15s, box-shadow .15s; -webkit-user-select: text; user-select: text; }
+  input[type=text].mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 12px; }
+  input[type=text]:hover { background: var(--input-hover); }
+  input[type=text]:focus { background: var(--bg); border-color: color-mix(in srgb, var(--fg) 22%, transparent); box-shadow: 0 0 0 4px color-mix(in srgb, var(--fg) 7%, transparent); }
+  input::placeholder { color: var(--muted); opacity: .8; }
+  .where { display: flex; align-items: center; gap: 10px; min-width: 0; }
+  .where .path { flex: 1; min-width: 0; }
+  .seg { display: inline-flex; padding: 2px; border-radius: 8px; background: var(--input); justify-self: start; }
+  .seg button { height: 28px; padding: 0 11px; border: 0; border-radius: 6px; background: none; color: var(--soft); transition: background-color .15s, color .15s; }
+  .seg button:hover { color: var(--fg); }
+  .seg button[aria-pressed=true] { background: var(--bg); color: var(--fg); box-shadow: 0 0 0 1px var(--line), 0 1px 2px rgb(0 0 0 / .06); }
+
+  /* 下载设置：默认收起，标题右边是现在的取值 */
+  details { margin-top: 18px; border-top: 1px solid var(--line); }
+  summary { display: flex; align-items: center; gap: 8px; padding: 12px 0; list-style: none; color: var(--soft); }
+  summary::-webkit-details-marker { display: none; }
+  summary::before { content: ""; flex: none; width: 5px; height: 5px; margin: 0 3px 0 2px; border: solid currentColor; border-width: 0 1.5px 1.5px 0; transform: rotate(-45deg); transition: transform .2s; }
+  details[open] summary::before { transform: rotate(45deg) translate(-1px, -1px); }
+  summary:hover { color: var(--fg); }
+  summary .sum { margin-left: auto; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  details .form { padding: 2px 0 6px; }
+
+  /* 进度 */
+  .sub { margin: -16px 0 22px; }
+  #steps { list-style: none; margin: 0; padding: 0; }
+  #steps li { display: flex; align-items: center; gap: 10px; height: 32px; color: var(--muted); transition: color .2s; }
+  /* 每步前面的记号画在同样大小的方块里（遮罩换图形），换状态时文字不挪位置 */
+  #steps li::before { content: ""; flex: none; width: 15px; height: 15px; background: currentColor; -webkit-mask: var(--mark) center / 15px no-repeat; mask: var(--mark) center / 15px no-repeat; --mark: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 15 15'%3E%3Ccircle cx='7.5' cy='7.5' r='2.9' fill='none' stroke='%23000' stroke-width='1.4'/%3E%3C/svg%3E"); }
+  #steps li[data-state=active] { color: var(--fg); }
+  #steps li[data-state=active]::before, #steps li[data-state=failed]::before { --mark: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 15 15'%3E%3Ccircle cx='7.5' cy='7.5' r='3.6'/%3E%3C/svg%3E"); }
+  #steps li[data-state=active]::before { animation: pulse 1.2s ease-in-out infinite; }
+  #steps li[data-state=done] { color: var(--soft); }
+  #steps li[data-state=done]::before { --mark: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 15 15'%3E%3Cpath d='M3.6 7.9l2.6 2.6 5.3-5.6' fill='none' stroke='%23000' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"); }
+  #steps li[data-state=failed] { color: var(--danger); }
+  #steps li.hide { display: none; }
+  @keyframes pulse { 50% { opacity: .3; } }
+  #log { height: 92px; margin: 14px 0 0 25px; overflow: hidden; display: flex; flex-direction: column; justify-content: flex-end; color: var(--muted); font-size: 11.5px; line-height: 18px; white-space: pre; -webkit-mask-image: linear-gradient(to bottom, transparent, #000 45%); mask-image: linear-gradient(to bottom, transparent, #000 45%); }
+  #log div { overflow: hidden; text-overflow: ellipsis; }
+  #p-error { margin: 14px 0 0 25px; }
+  #progress .actions { margin-left: 25px; }
 </style>
 </head>
 <body>
 <main>
-  <h1>Mori Studio</h1>
-  <ul id="recent" hidden></ul>
-  <button class="pick" id="pick">打开文件夹…</button>
-  <div id="status"></div>
+  <section id="home" hidden>
+    <h1>Mori Studio</h1>
+    <ul id="recent" hidden></ul>
+    <div class="actions">
+      <button class="btn primary" id="new">新建站点…</button>
+      <button class="btn" id="pick">打开文件夹…</button>
+    </div>
+    <p id="env" class="error" hidden><span></span><a href="https://nodejs.org/zh-cn/download" target="_blank">下载 Node.js</a><button id="recheck">重新检查</button></p>
+    <div id="status" class="error"></div>
+  </section>
+
+  <section id="create" hidden>
+    <button class="back" data-back>‹ 返回</button>
+    <h1>新建站点</h1>
+    <div class="form">
+      <label>位置</label>
+      <div class="where"><span class="path mono" id="parent"></span><button class="btn small" id="choose">选择…</button></div>
+      <label for="name">文件夹名</label>
+      <input type="text" id="name" spellcheck="false" autocomplete="off">
+    </div>
+    <div id="settings-slot"></div>
+    <div class="actions"><button class="btn primary" id="create-go">创建</button></div>
+    <p class="error" id="create-error"></p>
+  </section>
+
+  <section id="deps" hidden>
+    <button class="back" data-back>‹ 返回</button>
+    <h1 id="deps-name"></h1>
+    <p class="path mono sub" id="deps-path"></p>
+    <p class="muted" style="margin:0">还没有安装依赖。</p>
+    <div id="deps-slot"></div>
+    <div class="actions"><button class="btn primary" id="install-go">安装依赖</button></div>
+  </section>
+
+  <section id="progress" hidden>
+    <h1 id="p-title"></h1>
+    <p class="path mono sub" id="p-path"></p>
+    <ol id="steps">
+      <li data-step="download">下载主题</li>
+      <li data-step="install">安装依赖</li>
+      <li data-step="open">打开</li>
+    </ol>
+    <div id="log" class="mono"></div>
+    <p class="error" id="p-error"></p>
+    <div class="actions">
+      <button class="btn" id="cancel">取消</button>
+      <button class="btn primary" id="retry" hidden>重试</button>
+      <button class="btn ghost" id="p-back" hidden>返回</button>
+    </div>
+  </section>
+
+  <!-- 下载设置：新建站点和装依赖共用，切换页面时搬过去 -->
+  <details id="settings" hidden>
+    <summary>下载设置<span class="sum mono" id="sum"></span></summary>
+    <div class="form">
+      <label class="theme-only" for="repo">主题仓库</label>
+      <input class="theme-only mono" type="text" id="repo" spellcheck="false" autocomplete="off">
+      <label class="theme-only" for="branch">分支</label>
+      <input class="theme-only mono" type="text" id="branch" spellcheck="false" autocomplete="off">
+      <label>依赖源</label>
+      <div class="seg" id="registry-seg">
+        <button data-v="">默认</button>
+        <button data-v="https://registry.npmmirror.com">npmmirror</button>
+        <button data-v="custom">自定义</button>
+      </div>
+      <label class="custom-only"></label>
+      <input class="custom-only mono" type="text" id="registry" placeholder="https://" spellcheck="false" autocomplete="off">
+      <label for="proxy">代理</label>
+      <input class="mono" type="text" id="proxy" placeholder="http://127.0.0.1:7890" spellcheck="false" autocomplete="off">
+    </div>
+  </details>
 </main>
 <script>
   const { invoke } = window.__TAURI__.core;
   const { open } = window.__TAURI__.dialog;
+  const { listen } = window.__TAURI__.event;
   const $ = (id) => document.getElementById(id);
-  let busy = false;
+  const THEME_REPO = 'https://github.com/Musenxi/Astro-Theme-Mori.git';
+  const MIRROR = 'https://registry.npmmirror.com';
+  const sep = (p) => (p.includes('\\') && !p.includes('/') ? '\\' : '/');
+  const join = (dir, name) => dir.replace(/[\\/]+$/, '') + sep(dir) + name;
+  const parentOf = (p) => p.replace(/[\\/]+$/, '').replace(/[\\/][^\\/]*$/, '') || sep(p);
+  const baseOf = (p) => p.replace(/[\\/]+$/, '').split(/[\\/]/).pop();
+  // 路径太长时省略开头（.path 是从右往左排的）；前面加 LRM，开头的 / 才不会被挪到末尾
+  const setPath = (el, p) => { el.textContent = `\u200e${p}`; };
 
-  function status(text, error = false) {
-    $('status').textContent = text;
-    $('status').className = error ? 'error' : '';
+  let prefs = { parent: '', repo: '', branch: '', registry: '', proxy: '' };
+  let registryMode = '';
+  let from = 'home'; // 进度页“返回”回到哪里
+
+  function show(id) {
+    for (const s of document.querySelectorAll('main > section')) s.hidden = s.id !== id;
+    // 下载设置跟着当前页面走；装依赖时只有依赖源和代理
+    if (id === 'create') $('settings-slot').append($('settings'));
+    if (id === 'deps') $('deps-slot').append($('settings'));
+    $('settings').hidden = id !== 'create' && id !== 'deps';
+    for (const el of document.querySelectorAll('.theme-only')) el.classList.toggle('hide', id !== 'create');
+    summarize();
   }
 
-  async function openProject(path) {
-    if (busy) return;
-    busy = true;
-    document.querySelectorAll('button').forEach((b) => (b.disabled = true));
-    status('正在打开…');
-    try {
-      await invoke('open_project', { path }); // 成功后窗口会转到 Studio
-    } catch (e) {
-      status(String(e), true);
-      busy = false;
-      render();
-    }
-  }
+  /* ── 首页：最近打开、新建、打开文件夹 ── */
 
-  async function render() {
+  function status(text) { $('status').textContent = text; }
+
+  async function renderRecent() {
     const list = await invoke('recent_projects');
-    const ul = $('recent');
-    ul.replaceChildren(...list.map((p) => {
+    $('recent').replaceChildren(...list.map((p) => {
       const li = document.createElement('li');
       const b = document.createElement('button');
       b.className = 'open';
       b.disabled = !p.exists;
-      b.innerHTML = '<span class="name"></span><span class="path"></span>';
+      b.innerHTML = '<span class="name"></span><span class="path mono"></span>';
       b.querySelector('.name').textContent = p.name;
-      b.querySelector('.path').textContent = p.exists ? p.path : `${p.path}（不存在）`;
-      b.onclick = () => openProject(p.path);
+      setPath(b.querySelector('.path'), p.exists ? p.path : `${p.path}（不存在）`);
+      b.onclick = () => openFolder(p.path);
       const x = document.createElement('button');
       x.className = 'forget';
       x.title = '从列表移除';
       x.textContent = '×';
-      x.onclick = async () => { await invoke('forget_project', { path: p.path }); render(); };
+      x.onclick = async () => { await invoke('forget_project', { path: p.path }); renderRecent(); };
       li.append(b, x);
       return li;
     }));
-    ul.hidden = list.length === 0;
-    $('pick').disabled = false;
+    $('recent').hidden = list.length === 0;
   }
 
+  async function checkEnv(force) {
+    try {
+      await invoke('check_env', { force });
+      $('env').hidden = true;
+    } catch (e) {
+      $('env').firstElementChild.textContent = `${e}。`;
+      $('env').hidden = false;
+    }
+  }
+
+  /** 打开一个文件夹：是站点就打开；没装依赖先装；空的就在这里新建；别的不认 */
+  async function openFolder(path) {
+    status('');
+    const kind = await invoke('inspect_folder', { path });
+    if (kind === 'mori') return run('open', path);
+    if (kind === 'deps') return showDeps(path);
+    if (kind === 'empty') return startCreate(parentOf(path), baseOf(path));
+    status(kind === 'missing' ? '文件夹不存在。' : '这个文件夹不是 Mori 站点。');
+  }
+
+  /** 站点还没装依赖：可以改依赖源、代理再装 */
+  function showDeps(path) {
+    $('deps-name').textContent = baseOf(path);
+    setPath($('deps-path'), path);
+    $('install-go').onclick = () => { savePrefs(); run('install', path); };
+    show('deps');
+  }
+
+  /* ── 新建站点 ── */
+
+  function startCreate(parent, name) {
+    if (parent) prefs.parent = parent;
+    setPath($('parent'), prefs.parent);
+    $('name').value = name ?? 'blog';
+    $('create-error').textContent = '';
+    show('create');
+    $('name').focus();
+    $('name').select();
+  }
+
+  function readSettings() {
+    prefs.repo = $('repo').value.trim();
+    prefs.branch = $('branch').value.trim();
+    prefs.registry = registryMode === 'custom' ? $('registry').value.trim() : registryMode;
+    prefs.proxy = $('proxy').value.trim();
+  }
+
+  function fillSettings() {
+    $('repo').value = prefs.repo;
+    $('repo').placeholder = THEME_REPO;
+    $('branch').value = prefs.branch;
+    $('branch').placeholder = 'main';
+    $('proxy').value = prefs.proxy;
+    const r = prefs.registry.replace(/\/+$/, '');
+    setRegistry(r === '' || r === MIRROR ? r : 'custom');
+    if (registryMode === 'custom') $('registry').value = prefs.registry;
+  }
+
+  function setRegistry(v) {
+    registryMode = v;
+    for (const b of $('registry-seg').children) b.setAttribute('aria-pressed', String(b.dataset.v === v));
+    for (const el of document.querySelectorAll('.custom-only')) el.classList.toggle('hide', v !== 'custom');
+    summarize();
+  }
+
+  /** 收起时标题右边显示现在的取值：仓库 · 分支 · 依赖源 · 代理 */
+  function summarize() {
+    readSettings();
+    const parts = [];
+    if (!$('repo').classList.contains('hide')) {
+      parts.push((prefs.repo || THEME_REPO).replace(/^https?:\/\/(github\.com\/)?/, '').replace(/\.git$/, ''), prefs.branch || 'main');
+    }
+    if (prefs.registry) parts.push(registryMode === 'custom' ? prefs.registry.replace(/^https?:\/\//, '').replace(/\/$/, '') : 'npmmirror');
+    if (prefs.proxy) parts.push('代理');
+    $('sum').textContent = parts.join(' · ');
+  }
+
+  function savePrefs() {
+    readSettings();
+    invoke('save_setup_prefs', { prefs });
+  }
+
+  async function create() {
+    const name = $('name').value.trim();
+    const err = (t) => { $('create-error').textContent = t; };
+    if (!name) return err('要填文件夹名。');
+    if (/[\\/:*?"<>|]/.test(name) || name === '.' || name === '..') return err('文件夹名里不能有 \\ / : * ? " < > |');
+    readSettings();
+    if (registryMode === 'custom' && !/^https?:\/\/\S+$/.test(prefs.registry)) return err('依赖源要是 http:// 或 https:// 开头的网址。');
+    const path = join(prefs.parent, name);
+    const kind = await invoke('inspect_folder', { path });
+    if (kind !== 'missing' && kind !== 'empty') return err('这里已经有同名的文件夹了。');
+    savePrefs();
+    run('create', path);
+  }
+
+  /* ── 进度：下载主题、装依赖、打开 ── */
+
+  function step(name, state) {
+    const li = document.querySelector(`#steps [data-step="${name}"]`);
+    if (li) li.dataset.state = state;
+  }
+
+  function log(line) {
+    const box = $('log');
+    // 进度条（Receiving objects: 45%、Progress: resolved 120…）在同一行刷新，不往下堆
+    const key = (s) => s.replace(/\d.*$/, '');
+    const last = box.lastElementChild;
+    if (last && /\d/.test(line) && key(last.textContent) === key(line)) last.textContent = line;
+    else {
+      const div = document.createElement('div');
+      div.textContent = line;
+      box.append(div);
+      while (box.children.length > 6) box.firstElementChild.remove();
+    }
+  }
+
+  /** kind：create 新建站点；install 给站点装依赖；open 直接打开。打开成功后窗口转到 Studio */
+  async function run(kind, path) {
+    const steps = { create: ['download', 'install', 'open'], install: ['install', 'open'], open: ['open'] }[kind];
+    from = kind === 'create' ? 'create' : kind === 'install' ? 'deps' : 'home';
+    $('p-title').textContent = kind === 'create' ? '新建站点' : baseOf(path);
+    setPath($('p-path'), path);
+    for (const li of $('steps').children) { li.classList.toggle('hide', !steps.includes(li.dataset.step)); li.dataset.state = ''; }
+    $('log').replaceChildren();
+    $('p-error').textContent = '';
+    $('cancel').hidden = kind === 'open';
+    $('cancel').disabled = false;
+    $('cancel').textContent = '取消';
+    $('retry').hidden = $('p-back').hidden = true;
+    show('progress');
+
+    let current = steps[0];
+    let target = path;
+    if (kind !== 'open') {
+      const unlisten = await listen('setup', ({ payload: e }) => {
+        if (e.log) log(e.log);
+        else if (e.step && e.state === 'start') { current = e.step; step(e.step, 'active'); $('log').replaceChildren(); }
+        else if (e.step && e.state === 'done') step(e.step, 'done');
+      });
+      try {
+        target = await invoke('run_setup', { args: { kind, path, ...prefs } });
+      } catch (e) {
+        if (String(e) === '已取消') return show(from);
+        // 主题已经下好、只是依赖没装上：重试只装依赖，返回到装依赖那一页（可以换依赖源、代理）
+        if (current === 'install') return failed('install', String(e), () => run('install', path), () => showDeps(path));
+        return failed(current, String(e), () => run(kind, path));
+      } finally {
+        unlisten();
+      }
+    }
+    $('cancel').hidden = true;
+    step('open', 'active');
+    $('log').replaceChildren();
+    try {
+      await invoke('open_project', { path: target });
+    } catch (e) {
+      failed('open', String(e), () => run('open', target));
+    }
+  }
+
+  function failed(name, message, retry, back) {
+    step(name, 'failed');
+    $('p-error').textContent = message;
+    $('cancel').hidden = true;
+    $('retry').hidden = $('p-back').hidden = false;
+    $('retry').onclick = retry;
+    $('p-back').onclick = back ?? (() => (from === 'home' ? home() : show(from)));
+  }
+
+  /* ── 事件 ── */
+
+  const home = () => { status(''); renderRecent(); show('home'); };
+  $('new').onclick = () => startCreate();
   $('pick').onclick = async () => {
     const dir = await open({ directory: true });
-    if (dir) openProject(dir);
+    if (dir) openFolder(dir);
   };
-  render();
+  $('recheck').onclick = () => checkEnv(true);
+  $('choose').onclick = async () => {
+    const dir = await open({ directory: true, defaultPath: prefs.parent });
+    if (dir) { prefs.parent = dir; setPath($('parent'), dir); }
+  };
+  $('create-go').onclick = create;
+  $('name').onkeydown = (e) => { if (e.key === 'Enter') create(); };
+  for (const b of $('registry-seg').children) b.onclick = () => { setRegistry(b.dataset.v); if (b.dataset.v === 'custom') $('registry').focus(); };
+  for (const id of ['repo', 'branch', 'registry', 'proxy']) $(id).oninput = summarize;
+  for (const b of document.querySelectorAll('[data-back]')) b.onclick = home;
+  $('cancel').onclick = () => {
+    $('cancel').disabled = true;
+    $('cancel').textContent = '正在取消…';
+    invoke('cancel_setup');
+  };
+  document.onkeydown = (e) => { if (e.key === 'Escape' && (!$('create').hidden || !$('deps').hidden)) home(); };
+
+  (async () => {
+    renderRecent();
+    prefs = { ...prefs, ...(await invoke('setup_prefs')) };
+    fillSettings();
+    show('home');
+    checkEnv(false);
+  })();
 </script>
 </body>
 </html>

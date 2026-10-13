@@ -179,3 +179,13 @@ test('接入评论服务：连不通不写配置；地址上不是评论服务�
     assert.equal((await call('GET', '/api/comments/stats')).status, 200);
   } finally { fake.close(); }
 });
+
+test('新站点的引导：.mori-studio.json 里有 welcome 就进引导，走完清掉', async () => {
+  const f = join(root, '.mori-studio.json');
+  const st = existsSync(f) ? JSON.parse(readFileSync(f, 'utf8')) : {};
+  writeFileSync(f, JSON.stringify({ ...st, welcome: true }));
+  assert.equal((await call('GET', '/api/project')).body.welcome, true);
+  assert.equal((await call('POST', '/api/welcome/done')).status, 200);
+  assert.equal((await call('GET', '/api/project')).body.welcome, false);
+  assert.deepEqual(Object.keys(JSON.parse(readFileSync(f, 'utf8'))).includes('welcome'), false);
+});

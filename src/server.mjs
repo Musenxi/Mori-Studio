@@ -262,7 +262,7 @@ export async function startStudio({ root, port = 4400, dev = false }) {
         const pending = cn?.unread ?? 0;
         return send(res, 200, {
           root, configPath, config: { title: config.title ?? 'Mori', icon: config.icon || (siteIcons?.DEFAULT_ICON ?? null), iconStamp: (() => { const f = siteIconFile(); return f ? statSync(f).mtimeMs : 0; })(), iconPresets: siteIcons?.ICONS ?? [], description: config.description ?? '', accent: config.accent ?? '#002fa7', accentDark: config.accentDark, categories: config.categories ?? [], home: config.home, archive: config.archive, feed: config.feed, comments: config.comments?.provider === 'mori' ? { avatar: config.comments.avatar, status: config.comments.status ?? 'on', turnstileSiteKey: config.comments.turnstileSiteKey ?? '' } : undefined, nav: config.nav ?? null, actions: config.actions ?? null, actionsLayout: config.actionsLayout === 'split' ? 'split' : 'merged', lang: config.lang ?? 'zh-CN', head: typeof config.head === 'string' ? config.head : '', author: config.author ?? {}, site: typeof config.site === 'string' ? config.site : '' },
-          entries: listEntries(root), pages: listPages(root), assets: listAssets(root), dev, preview: { url: await preview.url() }, mcp: { command: stableNode(), args: [join(here, '../bin/mori-studio.mjs'), 'mcp', '--root', root], url: `http://127.0.0.1:${server.address().port}/mcp` }, publish: config.publish ?? null, comments: { provider: config.comments?.provider ?? null, avatar: avatarTemplate(config.comments?.avatar), endpoint: commentsEndpoint(), hasToken: !!commentsEndpoint() && !!adminToken(), pending },
+          entries: listEntries(root), pages: listPages(root), assets: listAssets(root), dev, preview: { url: await preview.url() }, mcp: { command: stableNode(), args: [join(here, '../bin/mori-studio.mjs'), 'mcp', '--root', root], url: `http://127.0.0.1:${server.address().port}/mcp` }, publish: config.publish ?? null, comments: { provider: config.comments?.provider ?? null, avatar: avatarTemplate(config.comments?.avatar), endpoint: commentsEndpoint(), hasToken: !!commentsEndpoint() && !!adminToken(), pending }, welcome: !!readState().welcome,
         });
       }
 
@@ -348,6 +348,12 @@ export async function startStudio({ root, port = 4400, dev = false }) {
       if (p === '/api/trash' && req.method === 'DELETE') {
         const key = url.searchParams.get('key');
         try { if (key) purgeTrash(root, key); else emptyTrash(root); return send(res, 200, { ok: true }); } catch (e) { return send(res, 400, { error: e.message }); }
+      }
+
+      /* ── 新站点的引导走完了（或跳过了）：以后打开不再进引导 ── */
+      if (req.method === 'POST' && p === '/api/welcome/done') {
+        replaceState((({ welcome: _drop, ...st }) => st)(readState()));
+        return send(res, 200, { ok: true });
       }
 
       /* ── 站点设置：改 mori.config.ts 里的单行字符串 ── */

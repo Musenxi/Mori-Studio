@@ -145,6 +145,7 @@ export const api = {
   setCommentToken: (token: string) => req('PUT', '/api/comments/token', { token }),
   connectComments: (endpoint: string, token: string) => req<{ ok: boolean; info: CommentsInfo }>('PUT', '/api/comments/connect', { endpoint, token }),
   commentsInfo: () => req<CommentsInfo>('GET', '/api/comments/info'),
+  welcomeDone: () => req('POST', '/api/welcome/done'),
   markCommentsSeen: () => req('POST', '/api/comments/seen'),
 
   previewStart: () => req<{ url: string }>('POST', '/api/preview/start', {}),

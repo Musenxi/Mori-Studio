@@ -58,6 +58,8 @@ export interface Project {
   mcp: { command: string; args: string[]; url: string };
   publish: PublishConfig | null;
   comments: { provider: string | null; /** 头像地址模板，{hash} 换成评论的头像哈希；空 = 不显示 */ avatar: string; endpoint: string; hasToken: boolean; pending: number };
+  /** 新建的站点第一次打开：先走引导 */
+  welcome: boolean;
 }
 
 export interface Friend { id?: string; name: string; url: string; desc?: string; avatar?: string; order?: number }

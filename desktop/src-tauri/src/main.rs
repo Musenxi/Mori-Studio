@@ -12,9 +12,10 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tauri::menu::{CheckMenuItem, Menu, MenuItem, Submenu};
-use tauri::{AppHandle, Manager, RunEvent, Url};
+use tauri::webview::NewWindowResponse;
+use tauri::{AppHandle, Emitter, Manager, RunEvent, Url, WebviewWindowBuilder};
 use tauri_plugin_dialog::{DialogExt, MessageDialogButtons};
 use tauri_plugin_updater::UpdaterExt;
 
@@ -32,12 +33,17 @@ type Log = Arc<Mutex<VecDeque<String>>>;
 struct Studio {
     child: Mutex<Option<Child>>,
     node: Mutex<Option<NodeEnv>>,
+    /// 正在新建站点 / 装依赖的进程（mori-studio create / install）
+    setup: Mutex<Option<Child>>,
 }
 
 #[derive(Clone)]
 struct NodeEnv {
     node: PathBuf,
     path: String,
+    version: String,
+    /// 登录 shell 里设的代理（http_proxy 这类），图形界面启动的程序拿不到，带给子进程
+    proxy: Vec<(String, String)>,
 }
 
 /// 停掉正在跑的 Studio 服务
@@ -81,11 +87,11 @@ fn output_within(cmd: &mut Command, secs: u64) -> Option<String> {
     }
 }
 
-/// PATH 和 node 在哪。macOS / Linux：从图形界面启动的程序拿不到终端里设的 PATH（nvm、Homebrew），所以去登录 shell 里问
+/// PATH、node 在哪、代理设置。macOS / Linux：从图形界面启动的程序拿不到终端里设的 PATH（nvm、Homebrew）和代理，所以去登录 shell 里问
 #[cfg(not(windows))]
-fn locate_node() -> (String, String) {
+fn locate_node() -> (String, String, Vec<(String, String)>) {
     let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".into());
-    let probe = r#"printf '\n__MORI__%s\n%s\n' "$PATH" "$(command -v node)""#;
+    let probe = r#"printf '\n__MORI__%s\n%s\n' "$PATH" "$(command -v node)"; env | grep -iE '^(https?|all|no)_proxy='"#;
     let text = output_within(Command::new(&shell).args(["-ilc", probe]), 8)
         .or_else(|| output_within(Command::new(&shell).args(["-lc", probe]), 8))
         .unwrap_or_default();
@@ -94,21 +100,23 @@ fn locate_node() -> (String, String) {
     if path.is_empty() {
         path = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin".into();
     }
-    (path, lines.next().unwrap_or("").trim().to_string())
+    let node = lines.next().unwrap_or("").trim().to_string();
+    let proxy = lines.filter_map(|l| l.split_once('=')).map(|(k, v)| (k.to_string(), v.to_string())).collect();
+    (path, node, proxy)
 }
 
-/// Windows：图形界面程序本来就带着用户的 PATH，用 where 找 node
+/// Windows：图形界面程序本来就带着用户的 PATH 和环境变量，用 where 找 node
 #[cfg(windows)]
-fn locate_node() -> (String, String) {
+fn locate_node() -> (String, String, Vec<(String, String)>) {
     let path = std::env::var("PATH").unwrap_or_default();
     let found = output_within(Command::new("where.exe").arg("node"), 8).unwrap_or_default();
-    (path, found.lines().next().unwrap_or("").trim().to_string())
+    (path, found.lines().next().unwrap_or("").trim().to_string(), Vec::new())
 }
 
 const NODE_FALLBACK: &[&str] = if cfg!(windows) { &[r"C:\Program Files\nodejs\node.exe"] } else { &["/opt/homebrew/bin/node", "/usr/local/bin/node"] };
 
 fn node_env() -> Result<NodeEnv, String> {
-    let (path, found) = locate_node();
+    let (path, found, proxy) = locate_node();
     let node = match std::env::var("MORI_NODE") {
         Ok(n) => PathBuf::from(n),
         Err(_) if !found.is_empty() => PathBuf::from(found),
@@ -124,7 +132,31 @@ fn node_env() -> Result<NodeEnv, String> {
     if (it.next().unwrap_or(0), it.next().unwrap_or(0)) < MIN_NODE {
         return Err(format!("Node.js 是 {v}，要 22.12 或更新"));
     }
-    Ok(NodeEnv { node, path })
+    Ok(NodeEnv { node, path, version: v, proxy })
+}
+
+/// 找过的 Node 记下来；force 时重新找（装了 Node 之后点“重新检查”）
+fn cached_node(studio: &Studio, force: bool) -> Result<NodeEnv, String> {
+    let mut g = studio.node.lock().unwrap();
+    if force || g.is_none() {
+        *g = Some(node_env()?);
+    }
+    Ok(g.clone().unwrap())
+}
+
+/// 跑 Node 的命令：PATH、代理都带上；管道断了 Studio 就退（MORI_STUDIO_PARENT=stdin）
+fn node_command(app: &AppHandle, env: &NodeEnv, args: &[&str]) -> Command {
+    let mut cmd = Command::new(&env.node);
+    quiet(&mut cmd)
+        .arg(studio_dir(app).join("bin/mori-studio.mjs"))
+        .args(args)
+        .env("PATH", &env.path)
+        .envs(env.proxy.iter().map(|(k, v)| (k, v)))
+        .env("MORI_STUDIO_PARENT", "stdin")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    cmd
 }
 
 /// Studio 的代码在哪：MORI_STUDIO_DIR > 开发时用仓库根目录 > 打包进应用的 resources/studio
@@ -234,6 +266,168 @@ fn forget_project(app: AppHandle, path: String) {
     write_recent(&app, &list);
 }
 
+/// 启动页一打开就查一次 Node.js：返回版本号；没有或太旧返回原因。force：装好 Node 之后重新找
+#[tauri::command]
+async fn check_env(app: AppHandle, force: bool) -> Result<String, String> {
+    Ok(cached_node(&app.state::<Studio>(), force)?.version)
+}
+
+/// 文件夹里这些系统文件不算内容
+const IGNORABLE: [&str; 3] = [".DS_Store", "Thumbs.db", "desktop.ini"];
+
+/// 文件夹是什么：missing 不存在；empty 空的；mori 是 Mori 站点；deps 是 Mori 站点但还没装依赖；other 别的
+#[tauri::command]
+fn inspect_folder(path: String) -> &'static str {
+    let root = Path::new(&path);
+    let Ok(entries) = std::fs::read_dir(root) else { return "missing" };
+    let names: Vec<String> = entries.filter_map(|e| e.ok()).map(|e| e.file_name().to_string_lossy().into_owned()).collect();
+    if names.iter().all(|n| IGNORABLE.contains(&n.as_str())) {
+        return "empty";
+    }
+    // 和 Studio 认项目的办法一样：package.json 的 exports 里有 ./flow
+    let mori = std::fs::read_to_string(root.join("package.json"))
+        .ok()
+        .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok())
+        .is_some_and(|v| v["exports"]["./flow"].is_string());
+    match (mori, root.join("node_modules/astro/package.json").exists()) {
+        (false, _) => "other",
+        (true, true) => "mori",
+        (true, false) => "deps",
+    }
+}
+
+/// 新建站点的设置（位置、主题仓库、分支、依赖源、代理），记在应用设置里，下次照用；空的是默认值
+#[derive(Serialize, Deserialize, Default)]
+#[serde(default)]
+struct SetupPrefs {
+    parent: String,
+    repo: String,
+    branch: String,
+    registry: String,
+    proxy: String,
+}
+
+#[tauri::command]
+fn setup_prefs(app: AppHandle) -> SetupPrefs {
+    let mut p: SetupPrefs = serde_json::from_value(read_settings(&app)["setup"].clone()).unwrap_or_default();
+    if !Path::new(&p.parent).is_dir() {
+        p.parent = app.path().document_dir().or_else(|_| app.path().home_dir()).map(|d| d.to_string_lossy().into_owned()).unwrap_or_default();
+    }
+    p
+}
+
+#[tauri::command]
+fn save_setup_prefs(app: AppHandle, prefs: SetupPrefs) {
+    write_setting(&app, "setup", serde_json::to_value(prefs).unwrap());
+}
+
+#[derive(Deserialize)]
+struct SetupArgs {
+    /// create：新建站点；install：给已有的站点装依赖
+    kind: String,
+    path: String,
+    #[serde(default)]
+    repo: String,
+    #[serde(default)]
+    branch: String,
+    #[serde(default)]
+    registry: String,
+    #[serde(default)]
+    proxy: String,
+}
+
+/// 新建站点 / 装依赖：跑 mori-studio create / install --json，每行进度原样转给启动页（事件 setup）。成功返回站点目录
+#[tauri::command]
+async fn run_setup(app: AppHandle, args: SetupArgs) -> Result<String, String> {
+    let studio = app.state::<Studio>();
+    if studio.setup.lock().unwrap().is_some() {
+        return Err("已经在进行了".into());
+    }
+    let env = cached_node(&studio, false)?;
+    let mut a: Vec<&str> = if args.kind == "create" { vec!["create", &args.path] } else { vec!["install", "--root", &args.path] };
+    for (flag, v) in [("--repo", &args.repo), ("--branch", &args.branch)] {
+        if args.kind == "create" && !v.trim().is_empty() {
+            a.extend([flag, v.trim()]);
+        }
+    }
+    if !args.registry.trim().is_empty() {
+        a.extend(["--registry", args.registry.trim()]);
+    }
+    a.push("--json");
+    let mut cmd = node_command(&app, &env, &a);
+    let proxy = args.proxy.trim();
+    if !proxy.is_empty() {
+        for k in ["http_proxy", "https_proxy", "HTTP_PROXY", "HTTPS_PROXY"] {
+            cmd.env(k, proxy);
+        }
+    }
+    cmd.env("NODE_USE_ENV_PROXY", "1"); // 没有 git 时 Node 自己下压缩包，也走代理
+    let mut child = cmd.spawn().map_err(|e| format!("运行 Node.js 失败：{e}"))?;
+    let (out, err) = (child.stdout.take().unwrap(), child.stderr.take().unwrap());
+    *studio.setup.lock().unwrap() = Some(child);
+
+    let h = app.clone();
+    thread::spawn(move || {
+        for line in BufReader::new(err).lines().map_while(Result::ok) {
+            let _ = h.emit("setup", serde_json::json!({ "log": line }));
+        }
+    });
+    let h = app.clone();
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        let mut result = Err("没有完成".to_string());
+        for line in BufReader::new(out).lines().map_while(Result::ok) {
+            let v = serde_json::from_str::<serde_json::Value>(&line).unwrap_or_else(|_| serde_json::json!({ "log": line }));
+            if let Some(e) = v["error"].as_str() {
+                result = Err(e.to_string());
+            } else if let (Some(true), Some(root)) = (v["done"].as_bool(), v["root"].as_str()) {
+                result = Ok(root.to_string());
+            }
+            let _ = h.emit("setup", v);
+        }
+        result
+    })
+    .await
+    .map_err(|e| e.to_string())?;
+    if let Some(mut c) = app.state::<Studio>().setup.lock().unwrap().take() {
+        let _ = c.wait();
+    }
+    result
+}
+
+/// 取消新建 / 装依赖：关掉它的标准输入，它会停下 git / pnpm、删掉建了一半的站点再退出；十秒还没退就强行停掉
+#[tauri::command]
+fn cancel_setup(app: AppHandle) {
+    if let Some(c) = app.state::<Studio>().setup.lock().unwrap().as_mut() {
+        drop(c.stdin.take());
+    }
+    thread::spawn(move || {
+        thread::sleep(Duration::from_secs(10));
+        if let Some(c) = app.state::<Studio>().setup.lock().unwrap().as_mut() {
+            let _ = c.kill();
+        }
+    });
+}
+
+/// 网页里 target=_blank 的链接（部署说明、读者的网站……）用系统浏览器打开
+fn open_external(url: &Url) {
+    if !matches!(url.scheme(), "http" | "https") {
+        return;
+    }
+    #[cfg(target_os = "macos")]
+    let mut cmd = Command::new("open");
+    #[cfg(windows)]
+    let mut cmd = {
+        let mut c = Command::new("rundll32.exe");
+        c.arg("url.dll,FileProtocolHandler");
+        c
+    };
+    #[cfg(all(unix, not(target_os = "macos")))]
+    let mut cmd = Command::new("xdg-open");
+    if let Ok(mut c) = quiet(&mut cmd).arg(url.as_str()).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null()).spawn() {
+        thread::spawn(move || c.wait());
+    }
+}
+
 /// 打开项目：起一个 Studio 服务，等它监听上了，窗口转过去
 #[tauri::command]
 async fn open_project(app: AppHandle, path: String) -> Result<(), String> {
@@ -243,26 +437,14 @@ async fn open_project(app: AppHandle, path: String) -> Result<(), String> {
     }
     let studio = app.state::<Studio>();
     stop(&studio);
-    let env = {
-        let mut g = studio.node.lock().unwrap();
-        if g.is_none() {
-            *g = Some(node_env()?);
-        }
-        g.clone().unwrap()
-    };
+    let env = cached_node(&studio, false)?;
     let port = free_port()?;
     // 界面按项目构建（项目里的主题模块会打包进去），每个项目一份，放在应用缓存里
     let ui = app.path().app_cache_dir().map_err(|e| e.to_string())?.join("ui").join(hash(&path));
-    let mut child = quiet(&mut Command::new(&env.node))
-        .arg(studio_dir(&app).join("bin/mori-studio.mjs"))
-        .args(["--root", &path, "--port", &port.to_string()])
-        .env("PATH", &env.path)
+    // 标准输入的管道留在 Child 里不写；我们一退出它就断，Studio 跟着退
+    let mut child = node_command(&app, &env, &["--root", &path, "--port", &port.to_string()])
         .env("MORI_STUDIO_DIST", &ui)
-        .env("MORI_STUDIO_PARENT", "stdin") // 管道留在 Child 里不写；我们一退出它就断，Studio 跟着退
         .current_dir(&root)
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
         .spawn()
         .map_err(|e| format!("启动 Studio 失败：{e}"))?;
     let log = drain(&mut child);
@@ -309,22 +491,33 @@ fn settings_file(app: &AppHandle) -> Option<PathBuf> {
     app.path().app_config_dir().ok().map(|d| d.join("settings.json"))
 }
 
-fn saved_icon(app: &AppHandle) -> String {
+fn read_settings(app: &AppHandle) -> serde_json::Value {
     settings_file(app)
         .and_then(|f| std::fs::read_to_string(f).ok())
         .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok())
-        .and_then(|v| v["icon"].as_str().map(String::from))
+        .filter(|v| v.is_object())
+        .unwrap_or_else(|| serde_json::json!({}))
+}
+
+fn write_setting(app: &AppHandle, key: &str, value: serde_json::Value) {
+    if let Some(f) = settings_file(app) {
+        let mut v = read_settings(app);
+        v[key] = value;
+        let _ = std::fs::create_dir_all(f.parent().unwrap());
+        let _ = std::fs::write(f, v.to_string());
+    }
+}
+
+fn saved_icon(app: &AppHandle) -> String {
+    read_settings(app)["icon"]
+        .as_str()
+        .map(String::from)
         .filter(|id| ICONS.iter().any(|(i, _, _)| i == id))
         .unwrap_or_else(|| ICONS[0].0.into())
 }
 
 fn save_icon(app: &AppHandle, id: &str) {
-    if let Some(f) = settings_file(app) {
-        let mut v = std::fs::read_to_string(&f).ok().and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok()).unwrap_or_else(|| serde_json::json!({}));
-        v["icon"] = id.into();
-        let _ = std::fs::create_dir_all(f.parent().unwrap());
-        let _ = std::fs::write(f, v.to_string());
-    }
+    write_setting(app, "icon", id.into());
 }
 
 /// 换 Dock 上的图标（只在应用开着时有效；要在主线程调用）
@@ -391,9 +584,17 @@ fn main() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(Studio::default())
-        .invoke_handler(tauri::generate_handler![recent_projects, open_project, forget_project])
+        .invoke_handler(tauri::generate_handler![recent_projects, open_project, forget_project, check_env, inspect_folder, setup_prefs, save_setup_prefs, run_setup, cancel_setup])
         .setup(|app| {
             let h = app.handle();
+            // 主窗口自己建（配置里 create: false），才能接管新窗口：target=_blank 的链接交给系统浏览器
+            let cfg = app.config().app.windows.iter().find(|w| w.label == "main").cloned().ok_or("没有主窗口的配置")?;
+            WebviewWindowBuilder::from_config(h, &cfg)?
+                .on_new_window(|url, _| {
+                    open_external(&url);
+                    NewWindowResponse::Deny
+                })
+                .build()?;
             // 默认菜单（含编辑菜单：没有它，网页里的复制粘贴快捷键在 macOS 上不起作用）再加一个“项目”
             let menu = Menu::default(h)?;
             let open = MenuItem::with_id(h, "open-project", "打开项目…", true, Some("CmdOrCtrl+O"))?;
