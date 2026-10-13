@@ -8,6 +8,7 @@ import { join, extname, normalize, resolve, dirname, basename, sep, delimiter } 
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
+import { homedir } from 'node:os';
 import sharp from 'sharp';
 import { avatarTemplate } from 'astro-mori/avatar';
 import { RESERVED_SLUGS, loadConfig, setConfigValue, setCommentsEndpoint, setThirdPartyComments, checkCommentsEndpoint, setHead, setCategories, setPublish, setNav, setActions, listPages, readFriends, writeFriends, readFriendsLost, writeFriendsLost, formatFriends, parseFriends, renameCategoryInEntries, renameTag, countPages, listEntries, readEntry, writeEntry, entryExists, skeleton, trashEntry, publishEntry, unpublishEntry, discardDraft, kindOf, isId, KINDS, IMAGE_EXT } from './project.mjs';
@@ -24,6 +25,7 @@ import { commentsClient } from './comments.mjs';
 import { keychain, commentsAccount, imageHostAccount } from './secrets.mjs';
 import { previewer } from './preview.mjs';
 import { markRunning } from './running.mjs';
+import { addRecent, readRecent } from './recent.mjs';
 import { listTrash, restoreTrash, purgeTrash, emptyTrash } from './trash.mjs';
 import { createMcpServer } from './mcp.mjs';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
@@ -255,6 +257,33 @@ export async function startStudio({ root, port = 4400, dev = false }) {
 
       /* ── 在不在、是哪个项目（mori-studio mcp 找正在跑的 Studio 用，要快） ── */
       if (req.method === 'GET' && p === '/api/ping') return send(res, 200, { root });
+
+      /* ── 切换站点：只在浏览器里用（桌面版有“项目”菜单）。换一个 --root 把自己重新启动一遍，界面轮询到新站点起来再刷新 ── */
+      if (req.method === 'GET' && p === '/api/projects') {
+        return send(res, 200, { current: root, recent: readRecent().filter((r) => r.path !== root), canSwitch: process.env.MORI_STUDIO_PARENT !== 'stdin' });
+      }
+      if (req.method === 'POST' && p === '/api/projects/switch') {
+        if (process.env.MORI_STUDIO_PARENT === 'stdin') return send(res, 400, { error: '桌面版从菜单“项目 → 打开项目…”切换' });
+        const to = resolve(String((await readJson(req)).root ?? '').trim().replace(/^~(?=\/|$)/, homedir()));
+        if (!existsSync(to) || !statSync(to).isDirectory()) return send(res, 400, { error: '没有这个文件夹' });
+        if (to === root) return send(res, 400, { error: '已经是这个站点' });
+        try { await loadConfig(to); } catch { return send(res, 400, { error: '这个文件夹里没有 mori.config.ts' }); }
+        addRecent(to);
+        send(res, 200, { ok: true });
+        setTimeout(async () => {
+          const argv = process.argv.slice(1);
+          for (const [flag, value] of [['--root', to], ['--port', String(server.address().port)]]) {
+            const k = argv.indexOf(flag);
+            if (k >= 0) argv[k + 1] = value; else argv.push(flag, value);
+          }
+          await preview.stop().catch(() => {});
+          server.closeAllConnections();
+          await new Promise((r) => server.close(r));
+          spawn(process.execPath, [...process.execArgv, ...argv], { cwd: process.cwd(), env: process.env, detached: true, stdio: 'ignore' }).unref();
+          process.exit(0);
+        }, 100);
+        return;
+      }
 
       /* ── 项目概况 ── */
       if (req.method === 'GET' && p === '/api/project') {
@@ -656,5 +685,6 @@ export async function startStudio({ root, port = 4400, dev = false }) {
   await new Promise((ok, fail) => { server.once('error', fail); server.listen(port, '127.0.0.1', ok); });
   port = server.address().port; // 传 0 时是随机端口
   markRunning(root, port);
+  addRecent(root);
   return { server, url: `http://127.0.0.1:${port}/`, root, stop: () => new Promise((r) => server.close(r)) };
 }

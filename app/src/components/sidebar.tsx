@@ -4,6 +4,7 @@ import { ChevronRight, Search, Files, FileText, Gauge, MessageSquare, Moon, Pane
 import { cn } from '@/lib/cn';
 import { useProject } from '@/lib/hooks';
 import { Tip } from '@/components/tip';
+import { ProjectSwitcher } from '@/components/project-switcher';
 
 const ICON = 17;
 
@@ -83,8 +84,10 @@ export function Sidebar({ onCompose, onSearch }: { onCompose: () => void; onSear
       <div className="flex items-center gap-3 px-3 pb-4 pt-3 max-lg:justify-center max-lg:px-0">
         <SiteIcon />
         <div className="min-w-0 max-lg:hidden">
-          <div className="truncate text-14-5 font-semibold leading-tight tracking-tight" title={project?.root}>{project?.config.title ?? 'Mori'}</div>
-          <div className="mono mt-0.5 text-10-5 leading-none text-muted-foreground">Studio{project?.dev ? ' · dev' : ''}</div>
+          <ProjectSwitcher>
+            <div className="truncate text-14-5 font-semibold leading-tight tracking-tight" title={project?.root}>{project?.config.title ?? 'Mori'}</div>
+            <div className="mono mt-0.5 text-10-5 leading-none text-muted-foreground">Studio{project?.dev ? ' · dev' : ''}</div>
+          </ProjectSwitcher>
         </div>
       </div>
       <div className="px-2 pb-3 max-lg:px-1.5">
