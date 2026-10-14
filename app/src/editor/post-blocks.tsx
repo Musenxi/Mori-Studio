@@ -15,6 +15,14 @@ export const POST_BLOCKS: Array<{ type: string; label: string; prefix: string; m
   { type: 'image', label: '图片', prefix: 'b', make: () => ({ type: 'image', alt: '', layout: 'inline' }) },
   { type: 'list', label: '列表', prefix: 'b', make: () => ({ type: 'list', items: [''] }) },
   { type: 'code', label: '代码', prefix: 'b', make: () => ({ type: 'code', code: '' }) },
+  { type: 'callout', label: '提示框', prefix: 'b', make: () => ({ type: 'callout', kind: 'note', text: [''] }) },
+  { type: 'math', label: '公式', prefix: 'b', make: () => ({ type: 'math', tex: '' }) },
+  { type: 'embed', label: '网站卡片', prefix: 'b', make: () => ({ type: 'embed', url: '' }) },
+];
+
+const CALLOUT_KINDS = [
+  { value: 'note', label: '说明' }, { value: 'tip', label: '提示' }, { value: 'important', label: '重要' },
+  { value: 'warning', label: '注意' }, { value: 'caution', label: '警告' },
 ];
 
 const cap = (b: Doc) => b.text; // 让 lint 别抱怨
@@ -65,8 +73,28 @@ export function PostBlockBody({ b, patch }: { b: Doc; patch: (p: Doc) => void })
           <Textarea rows={6} value={b.code} spellCheck={false} onChange={(e) => patch({ code: e.target.value })} variant="code" className="tab-2 whitespace-pre" />
         </div>
       );
+    case 'callout':
+      return (
+        <div className="space-y-2">
+          <OptionSelect className="w-28" value={b.kind ?? 'note'} onValueChange={(v) => patch({ kind: v })} options={CALLOUT_KINDS} />
+          <CalloutField b={b} patch={patch} />
+        </div>
+      );
+    case 'math':
+      return <Textarea rows={3} value={b.tex ?? ''} spellCheck={false} onChange={(e) => patch({ tex: e.target.value })} variant="code" placeholder="TeX" className="whitespace-pre" />;
+    case 'embed':
+      return <Input value={b.url ?? ''} onChange={(e) => patch({ url: e.target.value.trim() })} placeholder="网址" />;
   }
   return <span className="text-muted-foreground">不认识的块类型 {String(b.type)}</span>;
+}
+
+/** 提示框的几段：空行分段 */
+function CalloutField({ b, patch }: { b: Doc; patch: (p: Doc) => void }) {
+  const [text, setText] = useState(() => (b.text as unknown[]).map((it) => spansToText(asSpans(it))).join('\n\n'));
+  return (
+    <Textarea rows={3} value={text} placeholder="正文"
+      onChange={(e) => { setText(e.target.value); patch({ text: e.target.value.split(/\n\s*\n/).map((t) => compact(textToSpans(t.trim()))) }); }} />
+  );
 }
 
 function ListField({ b, patch }: { b: Doc; patch: (p: Doc) => void }) {

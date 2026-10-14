@@ -5,6 +5,8 @@
  *   {文字|tcy}        竖排里数字横排
  *   {文字|note:n1}    旁注（正文在文章的 notes 里，n1 是它的 id）
  *   {文字|fn:f1}      脚注
+ *   {文字|spoiler}    剧透
+ *   {TeX|math}        行内公式
  *   \*  \`  \[  \{  \\   转义
  * 标注可以嵌套（外层先写）：**{十天|note:n1}**。
  */
@@ -26,6 +28,8 @@ const open = (m) => {
     case 'code': return ['`', '`'];
     case 'link': return ['[', `](${safeHref(m.href)})`];
     case 'tcy': return ['{', '|tcy}'];
+    case 'spoiler': return ['{', '|spoiler}'];
+    case 'math': return ['{', '|math}'];
     case 'note': return ['{', `|note:${m.ref}}`];
     case 'fn': return ['{', `|fn:${m.ref}}`];
     default: return ['', ''];
@@ -93,8 +97,8 @@ export function textToSpans(text, marks = []) {
         if (bar >= 0) {
           const kind = body.slice(bar + 1), inner = body.slice(0, bar);
           const [type, ref] = kind.split(':');
-          if (type === 'tcy' || ((type === 'note' || type === 'fn') && ref)) {
-            const m = type === 'tcy' ? { type } : { type, ref };
+          if (type === 'tcy' || type === 'spoiler' || type === 'math' || ((type === 'note' || type === 'fn') && ref)) {
+            const m = ref ? { type, ref } : { type };
             if (inner === '') { flush(); spans.push({ t: '', marks: [...marks, m] }); } else push(inner, m);
             i = j + 1; continue;
           }

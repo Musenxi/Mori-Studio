@@ -67,7 +67,7 @@ export function wordCount(doc) {
       if (v.length && v.every((x) => x && typeof x === 'object' && 't' in x)) texts.push(v.map((s) => s.t).join(''));
       else v.forEach((x) => (typeof x === 'string' ? texts.push(x) : collect(x)));
     } else if (v && typeof v === 'object') {
-      if (v.type === 'code') return;
+      if (v.type === 'code' || v.type === 'math') return;
       for (const [k, x] of Object.entries(v)) {
         if (k === 'text' && typeof x === 'string') texts.push(x);
         else collect(x);
@@ -145,7 +145,7 @@ export function discardDraft(root, kind, id) {
 }
 
 /* ───────────── mori.config.ts 里的单行字符串设置 ───────────── */
-const CONFIG_KEYS = new Set(['title', 'icon', 'description', 'accent', 'accentDark', 'editorNote', 'actionsLayout']);
+const CONFIG_KEYS = new Set(['title', 'icon', 'description', 'accent', 'accentDark', 'editorNote', 'actionsLayout', 'spoiler']);
 /** 嵌套在 home / archive / feed 块里的设置：'home.style'、'home.direction'、'home.tocDirection'、'archive.direction'、'feed.content' */
 const BLOCK_KEYS = { 'home.style': ['quote', 'cover', 'list'], 'home.direction': ['h', 'v'], 'home.tocDirection': ['h', 'v'], 'archive.direction': ['h', 'v'], 'feed.content': ['excerpt', 'full'], 'comments.avatar': ['cravatar', 'gravatar', 'none'], 'comments.status': ['on', 'readonly', 'off'] };
 /** 块里的自由文字：空字符串就删掉这一行 */

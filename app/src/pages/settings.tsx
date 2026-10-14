@@ -172,6 +172,12 @@ export default function Settings() {
           </Field>
         </Card></Section>
 
+        <Section title="正文"><Card>
+          <Field label="剧透">
+            <Segmented value={edits.spoiler ?? cfg.spoiler ?? 'particles'} onValueChange={(v) => put('spoiler', v)} options={[{ value: 'particles', label: '颗粒' }, { value: 'blur', label: '模糊' }, { value: 'ink', label: '墨块' }]} />
+          </Field>
+        </Card></Section>
+
         <Section title="订阅"><Card>
           <Field label="订阅内容">
             <Segmented value={edits['feed.content'] ?? cfg.feed?.content ?? 'excerpt'} onValueChange={(v) => put('feed.content', v)} options={[{ value: 'excerpt', label: '只放摘要' }, { value: 'full', label: '放全文' }]} />

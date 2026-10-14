@@ -283,7 +283,7 @@ export function Spans({ text, dots = true }: { text: unknown; dots?: boolean }) 
     const marks: string[] = (s.marks ?? []).map((m: Doc) => m.type);
     const note = marks.includes('note') || marks.includes('fn');
     return (
-      <span key={i} className={cn(dots && marks.includes('place') && 'text-primary', marks.includes('strong') && 'font-bold', marks.includes('em') && 'italic', marks.includes('code') && 'font-mono text-smaller', marks.includes('link') && 'underline decoration-foreground/30 underline-offset-2')}>
+      <span key={i} className={cn(dots && marks.includes('place') && 'text-primary', marks.includes('strong') && 'font-bold', marks.includes('em') && 'italic', marks.includes('code') && 'font-mono text-smaller', marks.includes('link') && 'underline decoration-foreground/30 underline-offset-2', marks.includes('spoiler') && 'rounded-xs bg-foreground/15', marks.includes('math') && 'font-mono text-smaller')}>
         {dots && marks.includes('place') && <MapPin className="mr-[.18em] inline-block size-[.85em] align-[-.1em]" />}{s.t}{note && <sup className="mono text-sup text-muted-foreground">*</sup>}
       </span>
     );
@@ -388,7 +388,7 @@ function TextBox({ value, h, onDone }: { value: unknown; h: boolean; onDone: (te
 }
 
 const spansPlain = (t: unknown) => (typeof t === 'string' ? t : ((t as Doc[]) ?? []).map((s) => s.t).join(''));
-export const blockPlain = (p: Doc) => (p.type === 'list' ? (p.items as unknown[]).map(spansPlain).join('') : p.type === 'code' ? p.code ?? '' : spansPlain(p.text));
+export const blockPlain = (p: Doc) => (p.type === 'list' ? (p.items as unknown[]).map(spansPlain).join('') : p.type === 'callout' ? (p.text as unknown[]).map(spansPlain).join('') : p.type === 'code' ? p.code ?? '' : p.type === 'math' ? p.tex ?? '' : p.type === 'embed' ? p.url ?? '' : spansPlain(p.text));
 
 /** 一列文字里的一块：段落、标题、引用、列表、代码（版式和站点上的读法大致一样，不求逐像素）。字都是可编辑的单元 */
 export function Para({ p, v, first, place, fs, align }: { p: Doc; v: boolean; first: boolean; place?: Doc; fs: number; align?: string }) {
@@ -422,6 +422,17 @@ export function Para({ p, v, first, place, fs, align }: { p: Doc; v: boolean; fi
       );
     case 'code':
       return <Unit as="pre" plain id={p.id} value={p.code} className={cn('mono overflow-hidden px-[.8em] py-[.6em] text-em-80 leading-1-7 tracking-[0] whitespace-pre-wrap bg-foreground/[.05] text-soft-foreground [writing-mode:horizontal-tb]', !first && 'mt-[.9em]', v && 'w-[16em]')} />;
+    // 提示框、公式、网站卡片只显示，在 Markdown 写作页里改
+    case 'callout':
+      return (
+        <Deco as="aside" className={cn('block border-l-2 border-l-primary bg-foreground/[.04] px-[.8em] py-[.5em] [writing-mode:horizontal-tb]', gap, v && 'w-[16em]')}>
+          {(p.text as unknown[]).map((t, k) => <p key={k} className={k ? 'mt-[.4em]' : ''}><Spans text={t} /></p>)}
+        </Deco>
+      );
+    case 'math':
+      return <Deco as="pre" className={cn('mono block overflow-hidden py-[.3em] text-center text-em-80 whitespace-pre-wrap text-soft-foreground [writing-mode:horizontal-tb]', gap, v && 'w-[16em]')}>{p.tex}</Deco>;
+    case 'embed':
+      return <Deco className={cn('mono block truncate rounded-sm border border-border px-[.8em] py-[.5em] text-em-80 text-soft-foreground [writing-mode:horizontal-tb]', gap, v && 'w-[16em]')}>{p.url}</Deco>;
     default: return <Unit as="p" id={p.id} value={p.text} className={cn(ALIGN[align as keyof typeof ALIGN] ?? 'text-justify', gap)} />;
   }
 }

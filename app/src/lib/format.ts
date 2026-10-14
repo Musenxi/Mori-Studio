@@ -10,7 +10,7 @@ export function countWords(doc: { blocks?: unknown; notes?: unknown }): number {
       else v.forEach((x) => (typeof x === 'string' ? texts.push(x) : collect(x)));
     } else if (v && typeof v === 'object') {
       const o = v as Record<string, unknown>;
-      if (o.type === 'code') return;
+      if (o.type === 'code' || o.type === 'math') return;
       for (const [k, x] of Object.entries(o)) { if (k === 'text' && typeof x === 'string') texts.push(x); else collect(x); }
     }
   };

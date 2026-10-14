@@ -46,6 +46,7 @@ export interface Project {
     nav: NavItem[] | null;
     actions: Action[] | null;
     actionsLayout: 'merged' | 'split';
+    spoiler: 'particles' | 'blur' | 'ink';
     head: string;
     author: { name?: string; email?: string; url?: string };
     site: string;

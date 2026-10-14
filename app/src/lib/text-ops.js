@@ -68,11 +68,14 @@ export function hasMark(spans, a, b, type) {
 
 /* ───────────── 单元 ───────────── */
 
+/** 提示框、公式、网站卡片在排版里只显示、不改字（在 Markdown 写作页里改） */
+const FIXED = new Set(['callout', 'math', 'embed']);
+
 /** 一篇里所有能打字的单元，按顺序 */
 export function unitsOf(blocks) {
   const out = [];
   for (const b of blocks ?? []) {
-    if (!TEXT_BLOCKS.has(b.type)) continue;
+    if (!TEXT_BLOCKS.has(b.type) || FIXED.has(b.type)) continue;
     if (b.type === 'list') (b.items ?? []).forEach((_, i) => out.push({ unit: `${b.id}/${i}`, id: b.id, item: i }));
     else out.push({ unit: b.id, id: b.id });
   }
