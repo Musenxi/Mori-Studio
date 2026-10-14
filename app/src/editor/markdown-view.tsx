@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { Bold, Code, CodeXml, EyeOff, Heading2, Heading3, ImageIcon, Info, Italic, Lightbulb, Link2, List, MapPin, Asterisk, MessageSquareQuote, MessageSquareWarning, OctagonAlert, Quote, Sigma, SquareSigma, TriangleAlert } from 'lucide-react';
 import { Menu, MenuItem, MenuTrigger } from '@/components/action-menu';
 import { DropdownMenuContent } from '@/components/ui/dropdown-menu';
@@ -120,14 +120,16 @@ export function MarkdownView({ doc, setDoc }: { doc: Doc; setDoc: (fn: (d: Doc) 
             </span>
           );
           return (
-            <span key={t.cmd} className={t.gap ? 'ml-3' : ''}>
+            <Fragment key={t.cmd}>
+            <span className={t.gap ? 'ml-3' : ''}>
               <Tip label={t.key ? `${label}　${t.key}` : label}>
                 <button type="button" aria-label={label} onMouseDown={(e) => e.preventDefault()} onClick={() => run(t.cmd)} className={btn}>
                   <t.icon size={15} />
                 </button>
               </Tip>
-              {t.cmd === 'image' && <EmojiPicker btnClass={btn} onClose={() => ed.current?.focus()} onPick={(key) => { const { from, to } = ed.current!.view.state.selection.main; ed.current!.replaceRange(from, to, `:[${key}]`); ed.current!.focus(); }} />}
             </span>
+              {t.cmd === 'image' && <span><EmojiPicker btnClass={btn} onClose={() => ed.current?.focus()} onPick={(key) => { const { from, to } = ed.current!.view.state.selection.main; ed.current!.replaceRange(from, to, `:[${key}]`); ed.current!.focus(); }} /></span>}
+            </Fragment>
           );
         })}
         <span className="mono ml-auto pr-2 text-11 text-muted-foreground">{wan(words)} 字 · {doc.blocks?.length ?? 0} 块</span>
