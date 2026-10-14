@@ -7,6 +7,7 @@
  *   {文字|fn:f1}      脚注
  *   {文字|spoiler}    剧透
  *   {TeX|math}        行内公式
+ *   {包名_表情名|emoji}  表情
  *   \*  \`  \[  \{  \\   转义
  * 标注可以嵌套（外层先写）：**{十天|note:n1}**。
  */
@@ -30,6 +31,7 @@ const open = (m) => {
     case 'tcy': return ['{', '|tcy}'];
     case 'spoiler': return ['{', '|spoiler}'];
     case 'math': return ['{', '|math}'];
+    case 'emoji': return ['{', '|emoji}'];
     case 'note': return ['{', `|note:${m.ref}}`];
     case 'fn': return ['{', `|fn:${m.ref}}`];
     default: return ['', ''];
@@ -97,7 +99,7 @@ export function textToSpans(text, marks = []) {
         if (bar >= 0) {
           const kind = body.slice(bar + 1), inner = body.slice(0, bar);
           const [type, ref] = kind.split(':');
-          if (type === 'tcy' || type === 'spoiler' || type === 'math' || ((type === 'note' || type === 'fn') && ref)) {
+          if (type === 'tcy' || type === 'spoiler' || type === 'math' || type === 'emoji' || ((type === 'note' || type === 'fn') && ref)) {
             const m = ref ? { type, ref } : { type };
             if (inner === '') { flush(); spans.push({ t: '', marks: [...marks, m] }); } else push(inner, m);
             i = j + 1; continue;

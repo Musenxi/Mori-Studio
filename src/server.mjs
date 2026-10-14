@@ -125,6 +125,8 @@ export async function startStudio({ root, port = 4400, dev = false }) {
 
   // 站点图标（mori.config.ts 的 icon）：预设的 SVG 在项目的主题里（astro-mori/site-icon），自己的图在 public/ 里。旧版主题没有这个模块，左上角就退回到刊名首字
   const siteIcons = await import('astro-mori/site-icon').catch(() => null);
+  // 表情包（public/emoji/）：旧版主题没有这个模块，就当没有表情
+  const emojiMod = await import('astro-mori/emoji').catch(() => null);
   const ICON_EXT = new Set(['.svg', '.png', '.ico', '.jpg', '.jpeg', '.webp']);
   function siteIconFile(icon = config.icon || siteIcons?.DEFAULT_ICON) {
     if (!siteIcons || !icon) return null;
@@ -431,6 +433,19 @@ export async function startStudio({ root, port = 4400, dev = false }) {
         config = (await loadConfig(root)).config;
         await restartPreview(wasUp, true); // 预览开着就让它读新配置
         return send(res, 200, { ok: true, config });
+      }
+
+      /* ── 表情包：列表（本地的图换成 Studio 自己的地址），和本地表情图 ── */
+      if (req.method === 'GET' && p === '/api/emoji') {
+        const { packs } = emojiMod ? emojiMod.scanEmoji(join(root, 'public')) : { packs: [] };
+        const local = (u) => (u.startsWith('/emoji/') ? `/api/emoji/file${u.slice(6)}` : u);
+        return send(res, 200, { packs: packs.map((k) => ({ ...k, items: k.items.map((it) => ({ ...it, url: local(it.url) })) })) });
+      }
+      if (req.method === 'GET' && p.startsWith('/api/emoji/file/')) {
+        const dir = join(root, 'public/emoji');
+        const f = normalize(join(dir, decodeURIComponent(p.slice(16))));
+        if (!f.startsWith(dir) || !existsSync(f) || !statSync(f).isFile() || !MIME[extname(f).toLowerCase()]) return send(res, 404, { error: 'not found' });
+        return serveFile(res, f);
       }
 
       /* ── 站点图标：GET 给图（?preset= 看某个预设）；PUT 上传自己的图，存成 public/icon.<扩展名> 并写进配置 ── */

@@ -15,6 +15,7 @@ test('手工用例：无损往返', () => {
     [{ t: '链接', marks: [{ type: 'link', href: 'https://x.com/a(b)' }] }],
     [{ t: 'code * `', marks: [{ type: 'code' }] }],
     [{ t: '2025', marks: [{ type: 'tcy' }] }],
+    [{ t: '哔哩_狗头', marks: [{ type: 'emoji' }] }],
   ];
   for (const c of cases) assert.deepEqual(roundTrip(c), c);
 });

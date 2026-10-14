@@ -11,6 +11,7 @@ import { useAssetFolder } from '@/lib/folder';
 import type { Doc } from '@/lib/types';
 import { AssetDialog } from '@/components/asset-picker';
 import { Tip } from '@/components/tip';
+import { EmojiPicker } from '@/components/emoji-picker';
 import { createEditor, type CalloutKind, type MdCommand, type MdEditor, type PlaceTarget } from './cm';
 import { PlaceDialog, type PlaceForm } from './place-fields';
 
@@ -125,6 +126,7 @@ export function MarkdownView({ doc, setDoc }: { doc: Doc; setDoc: (fn: (d: Doc) 
                   <t.icon size={15} />
                 </button>
               </Tip>
+              {t.cmd === 'image' && <EmojiPicker btnClass={btn} onClose={() => ed.current?.focus()} onPick={(key) => { const { from, to } = ed.current!.view.state.selection.main; ed.current!.replaceRange(from, to, `:[${key}]`); ed.current!.focus(); }} />}
             </span>
           );
         })}

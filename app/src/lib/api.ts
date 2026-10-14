@@ -37,6 +37,8 @@ export interface MailSettings {
   cloudflare: { accountId: string; apiToken: string; hasToken?: boolean };
 }
 
+export interface EmojiPack { id: string; title: string; items: Array<{ name: string; key: string; url: string }> }
+
 export interface SpamRules { words: string[]; ips: string[]; urls: string[]; names: string[] }
 
 /** 评论服务的 /admin/info */
@@ -67,6 +69,7 @@ async function stream(url: string, onChunk: (all: string) => void): Promise<numb
 export const api = {
   project: () => req<Project>('GET', '/api/project'),
   stats: () => req<Stats>('GET', '/api/stats'),
+  emoji: () => req<{ packs: EmojiPack[] }>('GET', '/api/emoji'),
 
   entry: (kind: Kind, id: string) => req<Doc>('GET', `/api/entry/${kind}/${id}`),
   saveEntry: (kind: Kind, id: string, doc: Doc) => req<SaveResult>('PUT', `/api/entry/${kind}/${id}`, doc),
