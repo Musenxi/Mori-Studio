@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Bold, Code, Heading2, Heading3, ImageIcon, Italic, Link2, List, MapPin, Asterisk, MessageSquareQuote, Quote } from 'lucide-react';
+import { Bold, Code, CodeXml, EyeOff, Heading2, Heading3, ImageIcon, Info, Italic, Lightbulb, Link2, List, MapPin, Asterisk, MessageSquareQuote, MessageSquareWarning, OctagonAlert, Quote, Sigma, SquareSigma, TriangleAlert } from 'lucide-react';
+import { Menu, MenuItem, MenuTrigger } from '@/components/action-menu';
+import { DropdownMenuContent } from '@/components/ui/dropdown-menu';
 import { parsePlaceHref, placeHref, placesOf } from 'astro-mori/flow';
 import { api } from '@/lib/api';
 import { countWords, wan } from '@/lib/format';
@@ -9,18 +11,31 @@ import { useAssetFolder } from '@/lib/folder';
 import type { Doc } from '@/lib/types';
 import { AssetDialog } from '@/components/asset-picker';
 import { Tip } from '@/components/tip';
-import { createEditor, type MdCommand, type MdEditor, type PlaceTarget } from './cm';
+import { createEditor, type CalloutKind, type MdCommand, type MdEditor, type PlaceTarget } from './cm';
 import { PlaceDialog, type PlaceForm } from './place-fields';
 
-const TOOLS: Array<{ cmd: MdCommand | 'image' | 'note' | 'fn' | 'place'; label: string; icon: typeof Bold; key?: string; gap?: boolean }> = [
+const CALLOUTS: Array<{ kind: CalloutKind; label: string; icon: typeof Bold }> = [
+  { kind: 'note', label: '说明', icon: Info },
+  { kind: 'tip', label: '提示', icon: Lightbulb },
+  { kind: 'important', label: '重要', icon: MessageSquareWarning },
+  { kind: 'warning', label: '注意', icon: TriangleAlert },
+  { kind: 'caution', label: '警告', icon: OctagonAlert },
+];
+
+const TOOLS: Array<{ cmd: MdCommand | 'callout' | 'image' | 'note' | 'fn' | 'place'; label: string; icon: typeof Bold; key?: string; gap?: boolean }> = [
   { cmd: 'bold', label: '粗体', icon: Bold, key: '⌘B' },
   { cmd: 'italic', label: '斜体', icon: Italic, key: '⌘I' },
   { cmd: 'link', label: '链接', icon: Link2, key: '⌘K' },
   { cmd: 'code', label: '行内代码', icon: Code },
+  { cmd: 'spoiler', label: '剧透', icon: EyeOff },
+  { cmd: 'math', label: '行内公式', icon: Sigma },
   { cmd: 'h2', label: '大标题', icon: Heading2, gap: true },
   { cmd: 'h3', label: '小标题', icon: Heading3 },
   { cmd: 'quote', label: '引用', icon: Quote },
   { cmd: 'list', label: '列表', icon: List },
+  { cmd: 'codeBlock', label: '代码块', icon: CodeXml },
+  { cmd: 'mathBlock', label: '公式块', icon: SquareSigma },
+  { cmd: 'callout', label: '提示框', icon: MessageSquareWarning },
   { cmd: 'image', label: '插入图片', icon: ImageIcon, gap: true },
   { cmd: 'note', label: '旁注', icon: MessageSquareQuote },
   { cmd: 'fn', label: '脚注', icon: Asterisk },
@@ -78,7 +93,7 @@ export function MarkdownView({ doc, setDoc }: { doc: Doc; setDoc: (fn: (d: Doc) 
     if (cmd === 'image') setLib(true);
     else if (cmd === 'note' || cmd === 'fn') ed.current?.addNote(cmd);
     else if (cmd === 'place') openPin();
-    else ed.current?.run(cmd);
+    else if (cmd !== 'callout') ed.current?.run(cmd);
   };
 
   return (
@@ -86,10 +101,27 @@ export function MarkdownView({ doc, setDoc }: { doc: Doc; setDoc: (fn: (d: Doc) 
       <div className="mx-5 flex shrink-0 items-center gap-0.5 rounded-full bg-muted/70 px-2 py-1">
         {TOOLS.map((t) => {
           const label = t.label;
+          const btn = 'grid h-7 w-7 place-items-center rounded-full text-soft-foreground transition-[background-color,color,transform] hover:bg-popover hover:text-foreground hover:shadow-soft active:scale-90';
+          // 提示框：点开选五种之一
+          if (t.cmd === 'callout') return (
+            <span key={t.cmd}>
+              <Menu>
+                <Tip label={label}>
+                  <MenuTrigger asChild>
+                    <button type="button" aria-label={label} onMouseDown={(e) => e.preventDefault()} className={btn}><t.icon size={15} /></button>
+                  </MenuTrigger>
+                </Tip>
+                {/* 关菜单时焦点回到正文，不回到按钮上（否则接着按回车会再打开菜单） */}
+                <DropdownMenuContent align="start" onCloseAutoFocus={(e) => { e.preventDefault(); ed.current?.focus(); }}>
+                  {CALLOUTS.map((c) => <MenuItem key={c.kind} icon={<c.icon size={14} />} onSelect={() => ed.current?.callout(c.kind)}>{c.label}</MenuItem>)}
+                </DropdownMenuContent>
+              </Menu>
+            </span>
+          );
           return (
             <span key={t.cmd} className={t.gap ? 'ml-3' : ''}>
               <Tip label={t.key ? `${label}　${t.key}` : label}>
-                <button type="button" aria-label={label} onMouseDown={(e) => e.preventDefault()} onClick={() => run(t.cmd)} className="grid h-7 w-7 place-items-center rounded-full text-soft-foreground transition-[background-color,color,transform] hover:bg-popover hover:text-foreground hover:shadow-soft active:scale-90">
+                <button type="button" aria-label={label} onMouseDown={(e) => e.preventDefault()} onClick={() => run(t.cmd)} className={btn}>
                   <t.icon size={15} />
                 </button>
               </Tip>

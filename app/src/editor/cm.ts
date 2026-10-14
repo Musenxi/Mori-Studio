@@ -77,6 +77,56 @@ function prefixLines(view: View, prefix: string, strip: RegExp) {
   return true;
 }
 
+/**
+ * 代码块 ``` / 公式块 $$：选中了几行就把它们包起来；没选中时在光标这一行的下面另起一对空的（光标在空行上就在这一行）。
+ * 光标：代码块停在开头的 ``` 后面（接着写语言），公式块停在中间那一行
+ */
+function fence(view: View, mark: string, cursorAfterOpen: boolean) {
+  const doc = view.state.doc, r = view.state.selection.main;
+  let from = doc.lineAt(r.from), to = doc.lineAt(r.to);
+  let body = '';
+  if (!r.empty) body = view.state.sliceDoc(from.from, to.to);
+  else if (from.text.trim()) { // 光标在一行字上：挪到下一行，原来的字不动
+    view.dispatch({ changes: { from: from.to, insert: '\n' } });
+    from = to = view.state.doc.line(from.number + 1);
+  }
+  // 上下紧挨着有文字时补一个空行，和前后的段落分开
+  const d = view.state.doc;
+  const before = from.number > 1 && d.line(from.number - 1).text.trim() ? '\n' : '';
+  const after = to.number < d.lines && d.line(to.number + 1).text.trim() ? '\n' : '';
+  const insert = `${before}${mark}\n${body}\n${mark}${after}`;
+  const open = from.from + before.length + mark.length;
+  view.dispatch({ changes: { from: from.from, to: to.to, insert }, selection: { anchor: cursorAfterOpen ? open : open + 1 + body.length } });
+  view.focus();
+  return true;
+}
+
+/**
+ * 提示框（> [!NOTE] …）：光标在引用或提示框里时，整段改成这一种（已经是提示框就只换类型）；
+ * 否则把选中的几行变成提示框，空行上直接起一个空的
+ */
+function callout(view: View, kind: CalloutKind) {
+  const doc = view.state.doc, r = view.state.selection.main;
+  const head = `> [!${kind.toUpperCase()}]`;
+  let from = doc.lineAt(r.from), to = doc.lineAt(r.to);
+  if (from.text.startsWith('>')) {
+    while (from.number > 1 && doc.line(from.number - 1).text.startsWith('>')) from = doc.line(from.number - 1);
+    if (/^> ?\[!\w+\]\s*$/.test(from.text)) {
+      view.dispatch({ changes: { from: from.from, to: from.to, insert: head } });
+      view.focus();
+      return true;
+    }
+    view.dispatch({ changes: { from: from.from, insert: `${head}\n` } });
+    view.focus();
+    return true;
+  }
+  const lines = view.state.sliceDoc(from.from, to.to).split('\n');
+  const insert = lines.length === 1 && !lines[0].trim() ? `${head}\n> ` : [head, ...lines.map((l) => (l.trim() ? `> ${l}` : '>'))].join('\n');
+  view.dispatch({ changes: { from: from.from, to: to.to, insert }, selection: { anchor: from.from + insert.length } });
+  view.focus();
+  return true;
+}
+
 function linkSelection(v: View) {
   const r = v.state.selection.main, s = v.state.sliceDoc(r.from, r.to);
   v.dispatch({ changes: { from: r.from, to: r.to, insert: `[${s}]()` }, selection: { anchor: r.from + s.length + 3 } });
@@ -96,12 +146,15 @@ export interface MdEditor {
   destroy: () => void;
   run: (cmd: MdCommand) => void;
   insertBlock: (text: string) => void;
+  /** 选中的几行变成提示框 */
+  callout: (kind: CalloutKind) => void;
   addNote: (kind?: 'note' | 'fn') => void;
   placeTarget: () => PlaceTarget;
   /** 把一段范围换成新文字，光标放在它后面 */
   replaceRange: (from: number, to: number, insert: string) => void;
 }
-export type MdCommand = 'bold' | 'italic' | 'code' | 'link' | 'h2' | 'h3' | 'quote' | 'list';
+export type MdCommand = 'bold' | 'italic' | 'code' | 'link' | 'spoiler' | 'math' | 'h2' | 'h3' | 'quote' | 'list' | 'codeBlock' | 'mathBlock';
+export type CalloutKind = 'note' | 'tip' | 'important' | 'warning' | 'caution';
 
 export function createEditor({ parent, doc, placeholder, cursor = 'start', onChange, onImages }: { parent: HTMLElement; doc: string; placeholder?: string; /** 光标起始位置：新文章（只有标题）放在末尾，接着往下写 */ cursor?: 'start' | 'end'; onChange?: (text: string) => void; onImages?: (files: File[]) => Promise<string[]> }): MdEditor {
   const insertImages = async (view: View, files: File[], pos?: number) => {
@@ -144,6 +197,8 @@ export function createEditor({ parent, doc, placeholder, cursor = 'start', onCha
 
   const commands: Record<MdCommand, () => boolean> = {
     bold: () => wrap(view, '**'), italic: () => wrap(view, '*'), code: () => wrap(view, '`'), link: () => linkSelection(view),
+    spoiler: () => wrap(view, '||'), math: () => wrap(view, '$'),
+    codeBlock: () => fence(view, '```', true), mathBlock: () => fence(view, '$$', false),
     h2: () => prefixLines(view, '## ', /^#{1,4} /), h3: () => prefixLines(view, '### ', /^#{1,4} /),
     quote: () => prefixLines(view, '> ', /^> /), list: () => prefixLines(view, '- ', /^- /),
   };
@@ -159,6 +214,7 @@ export function createEditor({ parent, doc, placeholder, cursor = 'start', onCha
     destroy: () => view.destroy(),
     run: (cmd) => { commands[cmd](); },
     /** 光标处插一段文字（图库选中的图片等），前后各空一行 */
+    callout: (kind) => { callout(view, kind); },
     insertBlock(text) {
       const at = view.state.selection.main.head;
       view.dispatch({ changes: { from: at, insert: `\n\n${text}\n\n` }, selection: { anchor: at + text.length + 4 } });
