@@ -57,7 +57,11 @@ export function PostBlockBody({ b, patch }: { b: Doc; patch: (p: Doc) => void })
     case 'code':
       return (
         <div className="space-y-2">
-          <Input className="w-40" value={b.lang ?? ''} onChange={(e) => patch({ lang: e.target.value || undefined })} placeholder="语言" />
+          <div className="flex gap-2">
+            <Input className="w-40" value={b.lang ?? ''} onChange={(e) => patch({ lang: e.target.value || undefined })} placeholder="语言" />
+            <Input className="min-w-0 flex-1" value={b.filename ?? ''} onChange={(e) => patch({ filename: e.target.value || undefined })} placeholder="文件名" />
+            <Input className="w-32" value={b.highlight ?? ''} onChange={(e) => patch({ highlight: e.target.value.replace(/\s/g, '') || undefined })} placeholder="高亮行 1,3-5" />
+          </div>
           <Textarea rows={6} value={b.code} spellCheck={false} onChange={(e) => patch({ code: e.target.value })} variant="code" className="tab-2 whitespace-pre" />
         </div>
       );
