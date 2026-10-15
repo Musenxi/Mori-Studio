@@ -43,6 +43,10 @@ export default function Mcp() {
           <Field label="命令"><Snippet text={`codex mcp add mori -- ${cmd}`} /></Field>
           <Field label="config.toml"><Snippet text={`[mcp_servers.mori]\ncommand = ${JSON.stringify(command)}\nargs = ${JSON.stringify(args)}`} /></Field>
         </Card></Section>
+
+        <Section title="命令行"><Card>
+          <Field label="列出工具"><Snippet text={[command, args[0], 'tool', ...args.slice(2)].map(sh).join(' ')} /></Field>
+        </Card></Section>
       </Body>
     </>
   );

@@ -37,6 +37,17 @@ node bin/mori-studio.mjs mcp --root 博客项目目录
 
 删除、撤回、发布到线上、删除评论这几个工具标了 destructive，客户端会先问你。
 
+同一套工具也能在命令行里调用（给 Claude Code 这类能跑命令的客户端、脚本用；找 Studio 的方式和上面一样）：
+
+```bash
+node bin/mori-studio.mjs tool --root 博客项目目录                      # 列出工具
+node bin/mori-studio.mjs tool update_entry --help                     # 参数
+node bin/mori-studio.mjs tool read_entry --kind post --id hello       # 调用
+cat 正文.md | node bin/mori-studio.mjs tool update_entry --kind post --id hello --markdown -
+```
+
+不是字符串的参数按 JSON 写（`--meta '{"tags":["旅行"]}'`），值写 `-` 从标准输入读、`@路径` 读文件。破坏性的工具要加 `--yes` 才执行。出错退出码 1，参数不对 2，没加 `--yes` 3。
+
 ## 桌面版
 
 ### 安装

@@ -27,7 +27,8 @@ export function markRunning(root, port) {
 export async function findRunning(root) {
   try {
     const { port, pid } = JSON.parse(readFileSync(fileOf(root), 'utf8'));
-    process.kill(pid, 0);
+    // 进程已经没了（被强行结束，来不及清理）：顺手删掉这条记录
+    try { process.kill(pid, 0); } catch { rmSync(fileOf(root), { force: true }); return null; }
     const url = `http://127.0.0.1:${port}`;
     const r = await fetch(`${url}/api/ping`, { signal: AbortSignal.timeout(3000) });
     return r.ok && resolve((await r.json()).root) === resolve(root) ? url : null;

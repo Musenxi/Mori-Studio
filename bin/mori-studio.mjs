@@ -2,6 +2,7 @@
 /**
  *   mori-studio [--root 站点项目目录] [--port 4400] [--dev]
  *   mori-studio mcp [--root 站点项目目录]：MCP（stdio），给 Claude 桌面版这类客户端用。这个项目有 Studio 在跑就连过去，没有就自己起一个（不带界面）
+ *   mori-studio tool [名字] [--参数 值 …] [--root 站点项目目录]：在命令行里调用 MCP 那套工具（给 Claude Code、脚本用），不带名字是列出全部，见 src/cli-tool.mjs
  *   mori-studio create <目录> [--repo 主题仓库] [--branch main] [--registry 依赖源] [--json]：下载主题新建站点，装好依赖
  *   mori-studio install [--root 站点项目目录] [--registry 依赖源] [--json]：给站点装依赖
  *     --json：进度一行一个 JSON（桌面版的启动页读它）
@@ -43,20 +44,24 @@ async function ensureUi(root) {
 const args = process.argv.slice(2);
 const opt = (name, def) => { const k = args.indexOf(`--${name}`); return k >= 0 ? args[k + 1] : def; };
 
-/** MCP：标准输出只留给协议，日志都去标准错误 */
-async function mcp(project) {
-  console.log = console.error;
-  const { findRunning } = await import('../src/running.mjs');
+/** MCP 工具要连的 Studio：这个项目有 Studio 在跑就用它，没有就自己起一个（不带界面）。每次调用都重新找 */
+function studioBase(project) {
   let own = null;
-  const base = async () => {
+  return async () => {
+    const { findRunning } = await import('../src/running.mjs');
     const running = await findRunning(project);
     if (running) return running;
     if (!own) { const { startStudio } = await import('../src/server.mjs'); own = (await startStudio({ root: project, port: 0 })).url.replace(/\/$/, ''); }
     return own;
   };
+}
+
+/** MCP：标准输出只留给协议，日志都去标准错误 */
+async function mcp(project) {
+  console.log = console.error;
   const { createMcpServer } = await import('../src/mcp.mjs');
   const { StdioServerTransport } = await import('@modelcontextprotocol/sdk/server/stdio.js');
-  await createMcpServer(base).connect(new StdioServerTransport());
+  await createMcpServer(studioBase(project)).connect(new StdioServerTransport());
   process.stdin.on('end', () => process.exit(0)); // 客户端断开；自己起的 Studio 会让进程一直挂着，所以要主动退
 }
 
@@ -93,6 +98,15 @@ else try {
   if (args[0] === 'mcp') {
     useTheme(project);
     await mcp(project);
+  } else if (args[0] === 'tool') {
+    useTheme(project);
+    console.log = console.error; // 标准输出只放工具的结果
+    const { runTool } = await import('../src/cli-tool.mjs');
+    const k = args.indexOf('--root');
+    const rest = args.slice(1).filter((_, i) => k < 0 || (i + 1 !== k && i + 1 !== k + 1));
+    const code = await runTool(studioBase(project), rest);
+    // 自己起的 Studio 会让进程一直挂着；输出写完再退
+    process.stdout.write('', () => process.exit(code));
   } else {
     useTheme(project);
     await ensureUi(project);
