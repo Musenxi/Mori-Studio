@@ -24,7 +24,7 @@ export interface ImageHost { provider: string; endpoint: string; region: string;
 /** 图片：path 是它在 src/assets 下的相对路径（posts/hello/IMG.jpg），folder 是所在文件夹（'' 是未归类） */
 export interface AssetInfo { path: string; folder: string; name: string; size: number; mtime: number; live?: boolean; /** 设了图床时：已经传上去了 */ remote?: boolean; width?: number; height?: number; usedBy: Array<{ kind: 'post' | 'page' | 'friends'; id: string; title: string }> }
 /** 回收站里的一项：files 是 [回收站里的路径, 原路径]，都相对项目根目录 */
-export interface TrashItem { key: string; kind: 'post' | 'page' | 'asset'; label: string; deletedAt: number; size: number; files: Array<[string, string]> }
+export interface TrashItem { key: string; kind: 'post' | 'page' | 'asset' | 'emoji'; label: string; deletedAt: number; size: number; files: Array<[string, string]> }
 export interface GitInfo { isRepo: boolean; top?: string; nested?: boolean; branch?: string; remotes?: Array<{ name: string; url: string }>; changed?: number; last?: string }
 /** 防垃圾规则（存在评论服务里）：屏蔽词、IP 段、网址、昵称 */
 /** 邮件提醒（存在评论服务里）。密码、Key 读回来是空的，has* 表示填过；保存时留空表示不改 */
@@ -37,6 +37,8 @@ export interface MailSettings {
   cloudflare: { accountId: string; apiToken: string; hasToken?: boolean };
 }
 
+/** 表情包管理用：含空的包；file 是本地图（能改名、删除），url 是 pack.json 里登记的链接 */
+export interface ManagedPack { id: string; title: string; items: Array<{ name: string; key: string; file?: string; url?: string; size?: number }> }
 export interface EmojiPack { id: string; title: string; items: Array<{ name: string; key: string; url: string }> }
 
 export interface SpamRules { words: string[]; ips: string[]; urls: string[]; names: string[] }
@@ -70,6 +72,17 @@ export const api = {
   project: () => req<Project>('GET', '/api/project'),
   stats: () => req<Stats>('GET', '/api/stats'),
   emoji: () => req<{ packs: EmojiPack[] }>('GET', '/api/emoji'),
+  emojiPacks: () => req<{ packs: ManagedPack[] }>('GET', '/api/emoji/packs'),
+  createEmojiPack: (id: string) => req<{ ok: true; id: string }>('POST', '/api/emoji/packs', { id }),
+  uploadEmoji: async (pack: string, file: File) => {
+    const r = await fetch(`/api/emoji/upload?pack=${encodeURIComponent(pack)}&name=${encodeURIComponent(file.name)}`, { method: 'PUT', body: file });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new ApiError(j.error ?? '上传失败', r.status);
+    return j as { ok: true; name: string };
+  },
+  /** 不带 name 是给包改名 */
+  renameEmoji: (pack: string, name: string | undefined, to: string) => req<{ ok: true; name: string }>('POST', '/api/emoji/rename', { pack, name, to }),
+  removeEmoji: (pack: string, name?: string) => req<{ ok: true }>('DELETE', `/api/emoji?pack=${encodeURIComponent(pack)}${name === undefined ? '' : `&name=${encodeURIComponent(name)}`}`),
 
   entry: (kind: Kind, id: string) => req<Doc>('GET', `/api/entry/${kind}/${id}`),
   saveEntry: (kind: Kind, id: string, doc: Doc) => req<SaveResult>('PUT', `/api/entry/${kind}/${id}`, doc),

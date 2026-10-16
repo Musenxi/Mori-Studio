@@ -1,7 +1,7 @@
-import { useMemo, useRef, useState, type DragEvent, type ReactNode } from 'react';
+import { Fragment, useMemo, useRef, useState, type DragEvent, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useSearchParams } from 'react-router';
-import { Check, CloudUpload, FolderInput, Trash2, Upload, X } from 'lucide-react';
+import { Check, CloudUpload, FolderInput, Plus, Trash2, Upload, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { api, assetUrl, IMAGE_ACCEPT, isImageFile, type AssetInfo } from '@/lib/api';
 import { cn } from '@/lib/cn';
@@ -14,20 +14,24 @@ import { Input } from '@/components/ui/input';
 import { Empty, PageHeader } from '@/components/page';
 import { uploadedToast } from '@/components/asset-picker';
 import { StripLocationSwitch, useStripLocation } from '@/components/strip-location';
+import { EMOJI_ACCEPT, EmojiGrid, isEmojiFile, NameDialog } from '@/components/emoji-packs';
+import { forgetEmoji } from '@/components/emoji-picker';
 
 const size = (n: number) => (n > 1024 * 1024 ? `${(n / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`);
 const href = (r: AssetInfo['usedBy'][number]) => (r.kind === 'page' ? `/pages/${r.id}` : r.kind === 'friends' ? '/friends' : `/posts/${r.id}`);
 const entryHref = (folder: string) => (folder.startsWith('posts/') ? `/posts/${folder.slice(6)}` : folder.startsWith('pages/') ? `/pages/${folder.slice(6)}` : null);
 const DRAG = 'application/x-mori-assets';
 
-/** 左边的一类：全部 / 没被引用 / 看起来一样，或者一个文件夹（f:路径） */
-type View = 'all' | 'unused' | 'similar' | `f:${string}`;
+/** 左边的一类：全部 / 没被引用 / 看起来一样，一个文件夹（f:路径），或一个表情包（e:包名） */
+type View = 'all' | 'unused' | 'similar' | `f:${string}` | `e:${string}`;
 
 export default function Files() {
   const refresh = useRefresh();
   const confirm = useConfirm();
   const { data: project } = useProject();
   const { data, refetch } = useQuery({ queryKey: ['assets'], queryFn: api.assets, staleTime: 0 });
+  const { data: emoji, refetch: refetchEmoji } = useQuery({ queryKey: ['emoji-packs'], queryFn: api.emojiPacks, staleTime: 0 });
+  const [naming, setNaming] = useState<Parameters<typeof NameDialog>[0]['state']>(null);
   const [params, setParams] = useSearchParams();
   const view = (params.get('v') ?? 'all') as View;
   const [q, setQ] = useState('');
@@ -58,12 +62,30 @@ export default function Files() {
   const label = (f: string) => folderLabel(f, titles);
 
   const folder = view.startsWith('f:') ? view.slice(2) : null;
+  const packs = emoji?.packs ?? [];
+  const pack = view.startsWith('e:') ? packs.find((k) => k.id === view.slice(2)) ?? null : null;
+  const emojiChanged = async () => { forgetEmoji(); await refetchEmoji(); };
+  const newPack = () => setNaming({ title: '新建表情包', value: '', submit: '新建', run: async (id) => { const r = await api.createEmojiPack(id); await emojiChanged(); setView(`e:${r.id}`); } });
+  const renamePack = (id: string) => setNaming({ title: `改名「${id}」`, value: id, submit: '改名', run: async (to) => { const r = await api.renameEmoji(id, undefined, to); await emojiChanged(); setView(`e:${r.name}`); } });
+  const removePack = async (id: string, n: number) => {
+    if (!(await confirm({ title: `删除表情包「${id}」？`, description: n ? `里面的 ${n} 个表情一起删除，写着它们的地方会显示成文字。可以在回收站里还原。` : '可以在回收站里还原。', confirmLabel: '删除', danger: true }))) return;
+    try { await api.removeEmoji(id); await emojiChanged(); setView('all'); toast.success('已删除'); } catch (e) { toast.error((e as Error).message); }
+  };
+  const uploadEmoji = async (files: File[]) => {
+    if (!pack) return;
+    const ok = files.filter(isEmojiFile);
+    if (!ok.length) return toast.error('表情要是 PNG、GIF、WebP、SVG、AVIF 或 JPG');
+    setBusy(true);
+    try { for (const f of ok) await api.uploadEmoji(pack.id, f); toast.success(`已上传 ${ok.length} 个`); } catch (e) { toast.error((e as Error).message); }
+    await emojiChanged();
+    setBusy(false);
+  };
   const list = useMemo(() => {
     const base = view === 'unused' ? all.filter((a) => a.usedBy.length === 0) : folder !== null ? all.filter((a) => a.folder === folder) : all;
     return base.filter((a) => a.path.toLowerCase().includes(q.toLowerCase()));
   }, [all, view, folder, q]);
   const unused = all.filter((a) => a.usedBy.length === 0).length;
-  const title = view === 'all' ? '全部' : view === 'unused' ? '没被引用' : view === 'similar' ? '看起来一样' : label(folder!);
+  const title = view === 'all' ? '全部' : view === 'unused' ? '没被引用' : view === 'similar' ? '看起来一样' : pack ? pack.id : folder !== null ? label(folder) : '';
 
   const reload = () => Promise.all([refetch(), refresh()]);
   const [strip, setStrip] = useStripLocation();
@@ -157,24 +179,37 @@ export default function Files() {
   const open = folder !== null ? entryHref(folder) : null;
   const moveTargets = [SHARED, ...groups.slice(1).flatMap((g) => g.folders)];
 
+  const emojiGroup = (
+    <div className="pt-4">
+      <div className="flex items-center px-3 pb-1 text-11-5 text-muted-foreground">
+        <span className="flex-1">表情</span>
+        <button type="button" aria-label="新建表情包" onClick={newPack} className="grid h-5 w-5 place-items-center rounded-md hover:bg-foreground/[.06] hover:text-foreground"><Plus size={13} /></button>
+      </div>
+      {packs.map((k) => row(`e:${k.id}`, k.title === k.id ? k.id : `${k.title}（${k.id}）`, k.items.length))}
+    </div>
+  );
+
   return (
     <div className="min-h-full">
       <PageHeader title="文件" sub={`${all.length} 张`} actions={<>
-        <input ref={input} type="file" accept={IMAGE_ACCEPT} multiple hidden onChange={(e) => { void upload([...(e.target.files ?? [])]); e.target.value = ''; }} />
-        <StripLocationSwitch checked={strip} onCheckedChange={setStrip} />
+        <input ref={input} type="file" accept={pack ? EMOJI_ACCEPT : IMAGE_ACCEPT} multiple hidden onChange={(e) => { const fs = [...(e.target.files ?? [])]; void (pack ? uploadEmoji(fs) : upload(fs)); e.target.value = ''; }} />
+        {!pack && <StripLocationSwitch checked={strip} onCheckedChange={setStrip} />}
         {data?.host && <Button variant="secondary" onClick={() => void sync()} disabled={syncing || !data.host.pending}><CloudUpload size={14} />{syncing ? '同步中……' : data.host.pending ? `同步到图床（${data.host.pending}）` : '已同步到图床'}</Button>}
-        <Button variant="default" onClick={() => input.current?.click()} disabled={busy || view === 'similar'}><Upload size={14} />{busy ? '上传中……' : '上传图片'}</Button>
+        <Button variant="default" onClick={() => input.current?.click()} disabled={busy || view === 'similar' || (view.startsWith('e:') && !pack)}><Upload size={14} />{busy ? '上传中……' : pack ? '上传表情' : '上传图片'}</Button>
       </>} />
       <div className="mx-auto flex max-w-320 animate-rise gap-8 px-10 pb-24 pt-4">
         <nav className="sticky top-20 max-h-[calc(100vh-6rem)] w-56 shrink-0 space-y-0.5 self-start overflow-y-auto">
           {row('all', '全部', all.length)}
           {row('unused', '没被引用', unused)}
           {similar.length > 0 && row('similar', '看起来一样', similar.length)}
-          {groups.map((g) => (
-            <div key={g.label ?? 'top'} className="pt-4">
-              {g.label && <div className="px-3 pb-1 text-11-5 text-muted-foreground">{g.label}</div>}
-              {g.folders.map((f) => row(`f:${f}`, label(f), count(f), f))}
-            </div>
+          {groups.map((g, i) => (
+            <Fragment key={g.label ?? 'top'}>
+              <div className="pt-4">
+                {g.label && <div className="px-3 pb-1 text-11-5 text-muted-foreground">{g.label}</div>}
+                {g.folders.map((f) => row(`f:${f}`, label(f), count(f), f))}
+              </div>
+              {i === 0 && emojiGroup}
+            </Fragment>
           ))}
         </nav>
 
@@ -182,7 +217,7 @@ export default function Files() {
           className={cn('min-w-0 flex-1 rounded-2xl transition-[background-color,box-shadow]', over === 'grid' && 'bg-foreground/[.03] ring-2 ring-foreground/20')}
           onDragOver={(e) => { if (e.dataTransfer.types.includes('Files') && view !== 'similar') { e.preventDefault(); setOver('grid'); } }}
           onDragLeave={(e) => { if (e.currentTarget === e.target) setOver(null); }}
-          onDrop={(e) => { if (!e.dataTransfer.files.length) return; e.preventDefault(); setOver(null); void upload([...e.dataTransfer.files]); }}
+          onDrop={(e) => { if (!e.dataTransfer.files.length) return; e.preventDefault(); setOver(null); void (pack ? uploadEmoji([...e.dataTransfer.files]) : upload([...e.dataTransfer.files])); }}
         >
           <div className="mb-5 flex min-h-9 items-center gap-3">
             {sel.size > 0 ? (
@@ -205,13 +240,19 @@ export default function Files() {
             ) : (
               <>
                 <h2 className="truncate text-14 font-semibold">{title}</h2>
+                {pack && <>
+                  <button type="button" onClick={() => renamePack(pack.id)} className="text-12-5 text-muted-foreground underline decoration-foreground/20 underline-offset-4 hover:text-foreground hover:decoration-foreground">改名</button>
+                  <button type="button" onClick={() => void removePack(pack.id, pack.items.length)} className="text-12-5 text-muted-foreground underline decoration-foreground/20 underline-offset-4 hover:text-destructive hover:decoration-destructive">删除</button>
+                </>}
                 {open && <Link to={open} className="text-12-5 text-muted-foreground underline decoration-foreground/20 underline-offset-4 hover:text-foreground hover:decoration-foreground">打开</Link>}
               </>
             )}
-            {view !== 'similar' && <Input variant="pill" className="ml-auto w-52" value={q} onChange={(e) => setQ(e.target.value)} placeholder="按文件名找" />}
+            {view !== 'similar' && <Input variant="pill" className="ml-auto w-52" value={q} onChange={(e) => setQ(e.target.value)} placeholder={pack ? '按名字找' : '按文件名找'} />}
           </div>
 
-          {view === 'similar' ? (
+          {view.startsWith('e:') ? (
+            pack ? <EmojiGrid pack={pack} q={q} onChanged={emojiChanged} /> : emoji && <Empty>没有这个表情包。</Empty>
+          ) : view === 'similar' ? (
             <div className="space-y-8">
               {similar.map((g) => (
                 <div key={g.join('|')} className="grid grid-cols-[repeat(auto-fill,minmax(11.5rem,1fr))] gap-4">
@@ -230,6 +271,7 @@ export default function Files() {
           )}
         </main>
       </div>
+      <NameDialog state={naming} onClose={() => setNaming(null)} />
     </div>
   );
 }

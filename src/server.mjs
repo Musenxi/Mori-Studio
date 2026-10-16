@@ -19,6 +19,7 @@ import { probeSite } from './probe.mjs';
 import { gitInfo, gitInit, publishGit, publishLocal } from './publish.mjs';
 import { HEIC_EXT, heicToJpeg, uprightJpeg, stripLocation, toWebMp4 } from './media.mjs';
 import { hostReady, pendingAssets, syncToHost, testHost } from './cdn.mjs';
+import { listEmoji, createPack, saveEmoji, renamePack, renameEmoji, trashEmoji } from './emoji.mjs';
 import { listAssets, saveAsset, liveVideo, assetUsage, trashAsset, moveAssets, mergeAssets, indexAssets, rememberOrigin, findSame, similarGroups, sha256, cleanRel, SHARED } from './library.mjs';
 import { parseGpx, simplify, readExif, clusterStops } from './geo.mjs';
 import { commentsClient } from './comments.mjs';
@@ -446,6 +447,24 @@ export async function startStudio({ root, port = 4400, dev = false }) {
         const f = normalize(join(dir, decodeURIComponent(p.slice(16))));
         if (!f.startsWith(dir) || !existsSync(f) || !statSync(f).isFile() || !MIME[extname(f).toLowerCase()]) return send(res, 404, { error: 'not found' });
         return serveFile(res, f);
+      }
+
+      /* ── 表情包管理：列出（含空的包）、新建包、上传、改名（引用一起改）、删除（进回收站） ── */
+      if (req.method === 'GET' && p === '/api/emoji/packs') return send(res, 200, { packs: listEmoji(root) });
+      if (req.method === 'POST' && p === '/api/emoji/packs') {
+        try { return send(res, 200, { ok: true, id: createPack(root, (await readJson(req)).id) }); } catch (e) { return send(res, 400, { error: e.message }); }
+      }
+      if (req.method === 'PUT' && p === '/api/emoji/upload') {
+        try { return send(res, 200, { ok: true, name: saveEmoji(root, url.searchParams.get('pack'), url.searchParams.get('name') ?? '', await readBody(req, 5 * 1024 * 1024)) }); } catch (e) { return send(res, 400, { error: e.message }); }
+      }
+      if (req.method === 'POST' && p === '/api/emoji/rename') {
+        try {
+          const { pack, name, to } = await readJson(req);
+          return send(res, 200, { ok: true, name: name === undefined ? renamePack(root, pack, to) : renameEmoji(root, pack, name, to) });
+        } catch (e) { return send(res, 400, { error: e.message }); }
+      }
+      if (req.method === 'DELETE' && p === '/api/emoji') {
+        try { trashEmoji(root, url.searchParams.get('pack'), url.searchParams.get('name') ?? undefined); return send(res, 200, { ok: true }); } catch (e) { return send(res, 400, { error: e.message }); }
       }
 
       /* ── 站点图标：GET 给图（?preset= 看某个预设）；PUT 上传自己的图，存成 public/icon.<扩展名> 并写进配置 ── */

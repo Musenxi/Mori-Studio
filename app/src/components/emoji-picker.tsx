@@ -6,6 +6,8 @@ import { api, type EmojiPack } from '@/lib/api';
 import { cn } from '@/lib/cn';
 
 let cache: Promise<EmojiPack[]> | null = null;
+/** 表情包改过之后调一下，下次打开选择器、显示评论时重新取 */
+export const forgetEmoji = () => { cache = null; };
 const load = () => (cache ??= api.emoji().then((r) => r.packs).catch(() => { cache = null; return []; }));
 
 /** 站点的表情包（public/emoji/）。每次打开选择器时重新取，新放进去的表情马上能用 */
