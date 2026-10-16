@@ -2,11 +2,13 @@
  * “排版”视图里的操作：都是纯函数，输入文档，返回新文档。
  * 视图按横向读法把整篇排成一条：相邻的文字是一列，图片、图组、地图各是一块（见 flow.mjs 的 columns）。
  * 一项的 key 是它第一个块的 id。
- * 横滚和竖滚各存各的：块上的 h = { y, scale, writing, align, pos }（横滚），v = { writing, align, pos }（竖滚）。
+ * 横滚和竖滚各存各的：块上的 h = { y, scale, gap, bleed, writing, align, pos }（横滚），v = { writing, align, pos }（竖滚）。
  */
 import { columns, TEXT_BLOCKS, WRITING_BLOCKS } from 'astro-mori/flow';
 
-const place = (o) => ({ ...(o.y !== undefined ? { y: o.y } : {}), ...(o.scale !== undefined ? { scale: o.scale } : {}) });
+/** 横滚里的摆法：上下位置、缩放、和前一块的间距（标准间距的倍数）、图片满屏出血 */
+const PLACE_KEYS = ['y', 'scale', 'gap', 'bleed'];
+const place = (o) => Object.fromEntries(PLACE_KEYS.filter((k) => o[k] !== undefined).map((k) => [k, o[k]]));
 
 /**
  * 排版视图里的项，按顺序。每项：{ key, type, y?, scale?, ... }
@@ -45,8 +47,8 @@ export function nudgeItem(doc, key, dir) {
 }
 
 /**
- * 改一项的位置、缩放、竖排、对齐。undefined 表示去掉这个设置。
- * y / scale 是横滚的（写在块的 h 里）；writing、align、pos 写在 axis 指的那一边（'h' 横滚 / 'v' 竖滚），另一边不动。
+ * 改一项的位置、缩放、间距、出血、竖排、对齐。undefined 表示去掉这个设置。
+ * y / scale / gap / bleed 是横滚的（写在块的 h 里）；writing、align、pos 写在 axis 指的那一边（'h' 横滚 / 'v' 竖滚），另一边不动。
  * 一列文字里，位置和缩放写在每个块上（删掉第一个块也不丢）；竖排只写在能竖排的块上。
  */
 export function setPlace(doc, key, patch, axis = 'h') {
@@ -62,7 +64,7 @@ export function setPlace(doc, key, patch, axis = 'h') {
     if (!ids.has(b.id)) return b;
     const o = { ...b };
     const pos = {};
-    for (const k of ['y', 'scale']) if (k in patch) pos[k] = patch[k];
+    for (const k of PLACE_KEYS) if (k in patch) pos[k] = patch[k];
     if (Object.keys(pos).length) put(o, 'h', pos);
     const text = isTextItem(it) && WRITING_BLOCKS.has(b.type);
     // 标题的写法存“横排”也要写明（不写就跟着后面的文字）

@@ -1,10 +1,12 @@
 /**
  * 横向读法的版面：按横向读法的样子把整篇排成一条横卷，直接在上面摆。
- *   上下拖动 → 这一块在横滚时的上下位置（y），靠近顶、中、底和“跟着正文”时会吸住，画一条参考线（按住 ⌥ 不吸）
+ *   上下拖动 → 这一块在横滚时的上下位置（y），靠近版心的顶、中、底，别的块的上下边，和“跟着正文”时会吸住，画一条参考线（按住 ⌥ 不吸）
  *   拖到左右 → 换顺序
- *   右下角的圆点 → 大小（scale）
+ *   右下角的圆点 → 大小（scale：图和竖排文字是高度，横排文字是宽度），靠近原尺寸、铺满版心、和别的图一样高时吸住
+ *   选中后前面空隙里的竖条 → 和前一块的间距（gap，标准间距的倍数），靠近 0（紧贴）和 1 时吸住
  * 标题和后面那列文字挨着排：竖排（或右→左的手卷）标题在右，横排在左；标题没设上下位置就和文字顶端对齐。
- * 尺寸比例照着主题的横向读法（styles/travel.css）：视口高 S，图高 0.66S，上下留白 8% / 13%。
+ * 尺寸比例照着主题的横向读法（styles/travel.css）：视口高 S，图高 0.66S，版心上下让出 11% / 12%，
+ * 文字框高 0.92 图高（短文字也从同一条线开始），满屏出血的图铺满 S。
  * 这个文件里还有两种读法共用的块的画法（图、图组、自由排布、地图、文字框）。
  */
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
@@ -28,10 +30,14 @@ export const NAMES: Record<string, string> = { head: '标题', text: '文字', i
 export const ZOOMS: Record<string, number> = { s: 0.5, m: 0.72, l: 1 };
 export const ZOOM_KEY = 'mori-studio-layout-zoom';
 const imgSrc = (src?: string) => (!src ? '' : /^(https?:|data:|\/)/.test(src) ? src : assetUrl(assetOf(src), 900));
-/** 能拖大小的块：图都能；文字只有竖排的（大小就是竖排的高度）；标题的框按字的长短 */
-/** 没设上下位置时在哪：标题在顶上，别的居中 */
-export const yOf = (b: Doc) => (b.type === 'head' ? 0 : 0.5);
-export const scalable = (b: Doc) => ['image', 'pair', 'strip', 'grid', 'free'].includes(b.type) || (b.type === 'text' && b.writing === 'v');
+/** 没设上下位置时在哪：都在版心里居中（文字框一样高，所以文字顶端在同一条线上） */
+export const yOf = (_b: Doc) => 0.5;
+/** 能拖大小的块：图都能；文字（竖排是高度，横排是宽度）；标题的框按字的长短 */
+export const scalable = (b: Doc) => isImage(b) || b.type === 'text';
+const isImage = (b: Doc) => ['image', 'pair', 'strip', 'grid', 'free'].includes(b.type);
+/** 能满屏出血的块：图 */
+export const bleedable = isImage;
+export const GAP_MIN = -2, GAP_MAX = 6;
 
 /** 排版里一项一项往下排时的分组：标题和紧跟着的那列文字是一组 */
 export type Row = { head: Doc; text: Doc; at: number } | { item: Doc; at: number };
@@ -44,7 +50,7 @@ export function rowsOf(its: Doc[]): Row[] {
   return out;
 }
 
-interface Drag { key: string; y?: number; follow?: boolean; guide?: number; dx?: number; slot?: number | null; line?: number; scale?: number }
+interface Drag { key: string; y?: number; follow?: boolean; guide?: number; dx?: number; slot?: number | null; line?: number; scale?: number; gap?: number }
 
 export function HorizontalLayout() {
   const L = useLayout();
@@ -67,7 +73,7 @@ export function HorizontalLayout() {
   }, []);
 
   const place = (key: string, p: Doc) => commit(ops.setPlace(doc, key, p));
-  const g: Geo = { S, padT: S * 0.08, padB: S * 0.13, inner: S * 0.79, ph: S * 0.66, gap: S * 0.085, fs: S * 0.0195, rtl };
+  const g: Geo = { S, padT: S * 0.11, padB: S * 0.12, inner: S * 0.77, ph: S * 0.66, th: Math.min(S * 0.66 * 0.92, S * 0.77), gap: S * 0.085, fs: S * 0.0195, rtl };
 
   /* ── 拖动 ── */
   /** 拖到哪个空位：按屏幕上的左右顺序数（标题组里可能是反着排的），再换成文章里的顺序 */
@@ -104,6 +110,10 @@ export function HorizontalLayout() {
     // 标题吸到文字的顶端：就是“跟着正文”
     const textEl = b.type === 'head' && group ? group.querySelector<HTMLElement>(`[data-seq]:not([data-key="${CSS.escape(b.key)}"])`) : null;
     const textTop = textEl ? textEl.getBoundingClientRect().top - top : null;
+    // 别的块的上下边（对齐用）：跟着一起动的标题组里的另一块不算
+    const others = [...(track.current?.querySelectorAll<HTMLElement>('[data-seq]') ?? [])]
+      .filter((x) => x !== el && !box.contains(x) && !(b.type === 'text' && group && group.contains(x)))
+      .flatMap((x) => { const r = x.getBoundingClientRect(); return [r.top - top, r.bottom - top]; });
     const sx = e.clientX, sy = e.clientY, sc0 = scroller.current!.scrollLeft;
     let moved = false, reorder = false, last: Drag = { key: b.key };
     let raf = 0, pxX = e.clientX, lastY = e.clientY, alt = false;
@@ -117,6 +127,8 @@ export function HorizontalLayout() {
         // 吸附：顶、中、底，标题还有“和文字顶端对齐”
         const snaps: Array<[number, number, boolean]> = [[0, 0, false], [room / 2, room / 2 + h / 2, false], [room, room + h, false]];
         if (textTop !== null) snaps.unshift([textTop, textTop, true]);
+        // 和别的块顶端对齐、底端对齐
+        for (const e of others) snaps.push([e, e, false], [e - h, e, false]);
         for (const [at, line, f] of snaps) if (Math.abs(t - at) < 7) { t = at; guide = line; follow = f; break; }
       }
       const y = room > 1 ? clamp(t / room, 0, 1) : y0;
@@ -144,11 +156,46 @@ export function HorizontalLayout() {
 
   const startScale = (e: React.PointerEvent, b: Doc) => {
     e.preventDefault(); e.stopPropagation();
-    const el = (e.currentTarget as HTMLElement).parentElement!, h0 = el.getBoundingClientRect().height;
-    const s0 = b.scale ?? 1, sy = e.clientY;
+    const el = (e.currentTarget as HTMLElement).parentElement!, r0 = el.getBoundingClientRect();
+    // 横排文字拖的是宽度，别的是高度
+    const wide = b.type === 'text' && b.writing !== 'v';
+    const len0 = wide ? r0.width : r0.height, s0 = b.scale ?? 1, sx = e.clientX, sy = e.clientY;
+    // 吸附：原尺寸；图还有铺满版心、和别的图一样高
+    const base = wide ? len0 / s0 : b.type === 'text' ? g.th : b.type === 'free' ? g.ph * 1.04 : g.ph;
+    const keep = [1];
+    if (!wide) keep.push(g.inner / base);
+    if (isImage(b)) for (const im of track.current?.querySelectorAll<HTMLElement>('[data-seq] img') ?? []) if (!el.contains(im)) keep.push(im.getBoundingClientRect().height / base);
     let s = s0;
-    const move = (ev: PointerEvent) => { s = r2(clamp((s0 * (h0 + ev.clientY - sy)) / h0, 0.3, 1.6)); setDrag({ key: b.key, scale: s }); };
+    const move = (ev: PointerEvent) => {
+      const d = wide ? (rtl ? sx - ev.clientX : ev.clientX - sx) : ev.clientY - sy;
+      s = clamp((s0 * (len0 + d)) / len0, 0.3, wide ? 2.4 : 1.6);
+      if (!ev.altKey) for (const k of keep) if (Math.abs((s - k) * base) < 6) { s = k; break; }
+      s = r2(s);
+      setDrag({ key: b.key, scale: s });
+    };
     const up = () => { removeEventListener('pointermove', move); removeEventListener('pointerup', up); setDrag(null); if (s !== s0) place(b.key, { scale: Math.abs(s - 1) < 0.02 ? undefined : s }); };
+    addEventListener('pointermove', move); addEventListener('pointerup', up);
+  };
+
+  /** 拖间距：前面空隙里的竖条往外拖是加宽，往里拖是收紧（拖过头就叠上去）；靠近 0 和 1 吸住。标题组的间距记在标题上 */
+  const startGap = (e: React.PointerEvent, b: Doc, k0: number, also?: Doc) => {
+    e.preventDefault(); e.stopPropagation();
+    const sx = e.clientX;
+    let k = k0;
+    const move = (ev: PointerEvent) => {
+      const dx = ev.clientX - sx;
+      k = clamp(k0 + (rtl ? -dx : dx) / g.gap, GAP_MIN, GAP_MAX);
+      if (!ev.altKey) for (const at of [0, 1]) if (Math.abs(k - at) * g.gap < 6) k = at;
+      k = Math.round(k * 20) / 20;
+      setDrag({ key: b.key, gap: k });
+    };
+    const up = () => {
+      removeEventListener('pointermove', move); removeEventListener('pointerup', up); setDrag(null);
+      if (k === k0) return;
+      let next = ops.setPlace(doc, b.key, { gap: k === 1 ? undefined : k });
+      if (also) next = ops.setPlace(next, also.key, { gap: undefined });
+      commit(next);
+    };
     addEventListener('pointermove', move); addEventListener('pointerup', up);
   };
 
@@ -161,6 +208,7 @@ export function HorizontalLayout() {
     const step = e.shiftKey ? 0.1 : 0.02;
     if (e.key === 'ArrowUp' || e.key === 'ArrowDown') { e.preventDefault(); place(selected.key, { y: r2(clamp((selected.y ?? yOf(selected)) + (e.key === 'ArrowUp' ? -step : step), 0, 1)) }); }
     else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') { e.preventDefault(); commit(ops.nudgeItem(doc, selected.key, (e.key === 'ArrowLeft') === rtl ? 1 : -1)); }
+    else if (e.key === '[' || e.key === ']') { e.preventDefault(); const k = clamp((selected.gap ?? 1) + (e.key === ']' ? 0.25 : -0.25), GAP_MIN, GAP_MAX); place(selected.key, { gap: k === 1 ? undefined : k }); }
     else if ((e.key === '=' || e.key === '+' || e.key === '-') && scalable(selected)) { e.preventDefault(); place(selected.key, { scale: r2(clamp((selected.scale ?? 1) + (e.key === '-' ? -0.05 : 0.05), 0.3, 1.6)) }); }
     else if (e.key === 'Enter' && ops.isTextItem(selected)) { e.preventDefault(); L.startEdit(selected.key); }
     else if (e.key === 'Escape') L.select(null);
@@ -175,7 +223,7 @@ export function HorizontalLayout() {
 
   const frame = (b: Doc, i: number, fixed = false, grouped = false) => (
     <BlockFrame key={b.key} b={b} g={g} seq={i} fixed={fixed} grouped={grouped} selected={sel === b.key} editing={editing} drag={drag?.key === b.key ? drag : null}
-      onDown={(e) => startMove(e, b)} onScale={(e) => startScale(e, b)} onOpen={(e) => { if (ops.isTextItem(b)) L.startEdit(b.key, { x: e.clientX, y: e.clientY }); }}>
+      onDown={(e) => startMove(e, b)} onScale={(e) => startScale(e, b)} onGap={grouped ? undefined : (e) => startGap(e, b, b.gap ?? 1)} onOpen={(e) => { if (ops.isTextItem(b)) L.startEdit(b.key, { x: e.clientX, y: e.clientY }); }}>
       <Face b={b} g={g} scale={drag?.key === b.key && drag?.scale !== undefined ? drag.scale : b.scale ?? 1}
         places={places} here={b.type === 'map' ? hereOf(blocks, b.key, places) : undefined}
         active={sel === b.key && !drag && !editing} editing={editing} onPatch={(p) => commit(ops.patchBlock(doc, b.key, p))} />
@@ -192,7 +240,10 @@ export function HorizontalLayout() {
         onPointerDown={(e) => { if (e.target === e.currentTarget || e.target === track.current) { L.stopEdit(); L.select(null); } }}
         className={cn('absolute inset-0 flex items-center overflow-x-auto overflow-y-hidden rounded-2xl bg-muted/70 outline-none [scrollbar-width:thin]', rtl && '[direction:rtl]')}
       >
-        <div ref={track} className={cn('relative flex h-(--h) w-max items-start gap-x-(--gap) px-(--px) pt-(--pt) pb-(--pb) [direction:ltr]', rtl ? 'flex-row-reverse' : 'flex-row')} style={{ '--h': px(S), '--pt': px(g.padT), '--pb': px(g.padB), '--px': px(S * 0.1), '--gap': px(g.gap) }}>
+        <div ref={track} className={cn('relative flex h-(--h) w-max items-start gap-x-(--gap) bg-background px-(--px) pt-(--pt) pb-(--pb) [direction:ltr]', rtl ? 'flex-row-reverse' : 'flex-row')} style={{ '--h': px(S), '--pt': px(g.padT), '--pb': px(g.padB), '--px': px(S * 0.1), '--gap': px(g.gap) }}>
+          {/* 版心的上下边 */}
+          <i className="pointer-events-none absolute inset-x-0 top-(--pt) border-t border-dashed border-foreground/10" />
+          <i className="pointer-events-none absolute inset-x-0 bottom-(--pb) border-t border-dashed border-foreground/10" />
           {rows.map((r) => {
             if ('item' in r) return frame(r.item, r.at);
             const { head, text } = r;
@@ -200,12 +251,16 @@ export function HorizontalLayout() {
             const own = live(head) !== undefined;
             const ty = live(text) ?? 0.5;
             const moving = drag?.key === head.key || drag?.key === text.key;
+            // 整组和前一块的间距：标题上的，没有就用文字上的
+            const k = drag?.key === head.key && drag?.gap !== undefined ? drag.gap : head.gap ?? text.gap ?? 1;
+            const picked = (sel === head.key || sel === text.key) && !editing;
             return (
               <div key={head.key} data-group data-own={own ? '' : undefined}
-                className={cn('relative flex flex-none items-start', (rtl || text.writing === 'v') && 'flex-row-reverse', head.writing !== 'v' && 'gap-x-(--hg)',
+                className={cn('relative flex flex-none items-start', gapClass(g), (rtl || text.writing === 'v') && 'flex-row-reverse', head.writing !== 'v' ? 'gap-x-(--hg)' : 'gap-x-(--vg)',
                   own ? 'self-stretch' : 'top-(--top) [transform:translateY(var(--ty))]', moving ? 'transition-none' : '[transition:top_.25s_var(--ease-out),transform_.25s_var(--ease-out)]')}
-                style={{ '--top': `${ty * 100}%`, '--ty': `${-ty * 100}%`, '--hg': px(g.fs * 2.4) }}>
+                style={{ '--top': `${ty * 100}%`, '--ty': `${-ty * 100}%`, '--hg': px(g.fs * 2.4), '--vg': px(g.fs * 1.2), '--gm': gapMargin(k, g) }}>
                 {frame(head, r.at, !own, true)}{frame(text, r.at + 1, !own, true)}
+                {picked && <GapHandle k={k} g={g} onDown={(e) => startGap(e, head, head.gap ?? text.gap ?? 1, head.gap === undefined ? undefined : text)} />}
               </div>
             );
           })}
@@ -237,13 +292,15 @@ export function ToolBtn({ label, children, onClick, disabled, active }: { label:
 
 /* ───────────── 块 ───────────── */
 
-type Geo = { S: number; padT: number; padB: number; inner: number; ph: number; gap: number; fs: number; rtl: boolean };
+type Geo = { S: number; padT: number; padB: number; inner: number; ph: number; th: number; gap: number; fs: number; rtl: boolean };
 
 /** 一块的外框：选中、悬停的描边，上下位置，拖大小的圆点。fixed：在跟着文字的标题组里，位置由组决定 */
-function BlockFrame({ b, g, seq, fixed, grouped, selected, editing, drag, onDown, onScale, onOpen, children }: {
-  b: Doc; g: Geo; seq: number; fixed: boolean; grouped: boolean; selected: boolean; editing: boolean; drag: Drag | null; onDown: (e: React.PointerEvent) => void; onScale: (e: React.PointerEvent) => void; onOpen: (e: React.MouseEvent) => void; children: ReactNode;
+function BlockFrame({ b, g, seq, fixed, grouped, selected, editing, drag, onDown, onScale, onGap, onOpen, children }: {
+  b: Doc; g: Geo; seq: number; fixed: boolean; grouped: boolean; selected: boolean; editing: boolean; drag: Drag | null; onDown: (e: React.PointerEvent) => void; onScale: (e: React.PointerEvent) => void; onGap?: (e: React.PointerEvent) => void; onOpen: (e: React.MouseEvent) => void; children: ReactNode;
 }) {
+  const bleed = !!b.bleed && bleedable(b);
   const y = drag?.y ?? b.y ?? yOf(b);
+  const k = drag?.gap ?? b.gap ?? 1;
   const lifting = drag?.dx !== undefined;
   const typing = editing && ops.isTextItem(b);
   return (
@@ -252,19 +309,39 @@ function BlockFrame({ b, g, seq, fixed, grouped, selected, editing, drag, onDown
       data-key={b.key}
       onPointerDown={onDown}
       onDoubleClick={onOpen}
-      className={cn('group relative flex-none rounded-3', grouped ? 'outline-offset-2' : 'outline-offset-6', !fixed && 'top-(--top) [transform:translate(var(--dx),var(--ty))]', fixed && lifting && '[transform:translateX(var(--dx))]',
+      className={cn('group relative flex-none rounded-3', !grouped && gapClass(g), grouped ? 'outline-offset-2' : 'outline-offset-6', !fixed && 'top-(--top) [transform:translate(var(--dx),var(--ty))]', fixed && lifting && '[transform:translateX(var(--dx))]',
         typing ? 'cursor-text' : ['touch-none select-none', drag ? 'cursor-grabbing' : 'cursor-grab'], drag ? 'transition-none' : '[transition:top_.25s_var(--ease-out),transform_.25s_var(--ease-out)]',
         selected ? (typing ? 'outline outline-1 outline-foreground/45' : 'outline outline-2 outline-foreground') : 'hover:outline hover:outline-1 hover:outline-foreground/25', lifting && 'z-10 opacity-90 shadow-pop')}
-      style={{ '--top': `${y * 100}%`, '--dx': px(drag?.dx ?? 0), '--ty': `${-y * 100}%` }}
+      // 满屏出血的图：贴着舞台的上下边，不管上下位置
+      style={{ '--top': bleed ? px(-g.padT) : `${y * 100}%`, '--dx': px(drag?.dx ?? 0), '--ty': bleed ? '0px' : `${-y * 100}%`, '--gm': gapMargin(k, g) }}
     >
       {children}
-      {selected && !editing && scalable(b) && (
+      {selected && !editing && onGap && <GapHandle k={k} g={g} onDown={onGap} />}
+      {selected && !editing && scalable(b) && !bleed && (
         <span onPointerDown={onScale} aria-label="拖动改大小" className="absolute -bottom-2.75 -right-2.75 z-20 grid h-5.5 w-5.5 cursor-nwse-resize place-items-center rounded-full bg-popover shadow-pop">
           <i className="h-2 w-2 rounded-full bg-primary" />
         </span>
       )}
       {drag?.scale !== undefined && <span className="mono absolute -top-7 right-0 rounded-full bg-primary px-2 py-0.5 text-11 text-primary-foreground">{Math.round(drag.scale * 100)}%</span>}
     </div>
+  );
+}
+
+/** 和前一块的间距（标准间距的 k 倍）：多出来的那部分是这一块前面的外边距。手卷从右往左排，“前面”在右边 */
+const gapMargin = (k: number, g: Geo) => px((k - 1) * g.gap);
+const gapClass = (g: Geo) => (g.rtl ? 'mr-(--gm)' : 'ml-(--gm)');
+
+/** 选中的块前面空隙里的竖条：拖它改间距，旁边显示倍数 */
+function GapHandle({ k, g, onDown }: { k: number; g: Geo; onDown: (e: React.PointerEvent) => void }) {
+  // 放在空隙正中；叠上去（k < 0）时贴着块的边
+  const off = Math.max(0, k * g.gap) / 2;
+  return (
+    <span onPointerDown={onDown} aria-label="拖动改间距"
+      className={cn('absolute top-1/2 z-20 grid h-10 w-4 -translate-y-1/2 cursor-ew-resize place-items-center', g.rtl ? '-right-(--o) translate-x-1/2' : '-left-(--o) -translate-x-1/2')}
+      style={{ '--o': px(off) }}>
+      <i className="h-7 w-1 rounded-full bg-primary shadow-pop" />
+      <span className="mono pointer-events-none absolute -top-5 rounded-full bg-popover px-1.5 text-11 text-soft-foreground shadow-soft">{k === 1 ? '1×' : `${r2(k)}×`}</span>
+    </span>
   );
 }
 
@@ -446,7 +523,7 @@ export const VPOS = { start: 'justify-start', center: 'justify-center', end: 'ju
  * 文字框（一列文字或一个标题）：改字时整块是一个 contentEditable，里面每段是一个单元。
  * size：竖排时是高度，横排时是宽度（标题横排时按字宽，不设）
  */
-export function TextFace({ b, v, fs, size, align, editing }: { b: Doc; v: boolean; fs: number; size?: number; align?: string; editing: boolean }) {
+export function TextFace({ b, v, fs, size, minH, align, editing }: { b: Doc; v: boolean; fs: number; size?: number; minH?: number; align?: string; editing: boolean }) {
   const L = useLayout();
   const ref = useRef<HTMLDivElement>(null);
   useEditHost(ref, editing, L.edit);
@@ -464,31 +541,35 @@ export function TextFace({ b, v, fs, size, align, editing }: { b: Doc; v: boolea
   });
   return (
     <div ref={ref} data-frame={b.key} contentEditable={editing ? 'plaintext-only' : undefined} suppressContentEditableWarning spellCheck={false}
-      className={cn('serif text-(length:--fs) text-foreground outline-none', ALIGN[align as keyof typeof ALIGN], v ? [size ? 'h-(--size)' : 'h-max', 'leading-[2.05] tracking-[.12em] [writing-mode:vertical-rl]'] : size ? 'w-(--size) leading-[1.9]' : 'leading-[1.9]', editing && 'select-text')}
-      style={{ '--fs': px(fs), '--size': size ? px(size) : undefined, '--hfs': px(fs * (v ? 1.6 : 1.75)), '--efs': px(fs * 0.85), '--dfs': px(fs * 0.66), '--dmb': px(fs * 0.3), '--qfs': px(fs * 1.4), '--ml': px(fs * 0.6) }}>
+      className={cn('serif text-(length:--fs) text-foreground outline-none', ALIGN[align as keyof typeof ALIGN], v ? [size ? 'h-(--size)' : 'h-max', 'leading-[2.05] tracking-[.12em] [writing-mode:vertical-rl]'] : size ? 'w-(--size) leading-[1.9]' : 'leading-[1.9]', !v && minH && 'min-h-(--minh)', editing && 'select-text')}
+      style={{ '--fs': px(fs), '--size': size ? px(size) : undefined, '--minh': minH ? px(minH) : undefined, '--hfs': px(fs * (v ? 1.6 : 1.75)), '--efs': px(fs * 0.85), '--dfs': px(fs * 0.66), '--dmb': px(fs * 0.3), '--qfs': px(fs * 1.4), '--ml': px(fs * 0.6) }}>
       {list.map((p, i) => <Para key={p.id} p={p} v={v} first={!i} place={L.places.find((x) => x.block === p.id)} fs={fs} align={align} />)}
     </div>
   );
 }
 
 function Face({ b, g, scale, places, here, active, editing, onPatch }: { b: Doc; g: Geo; scale: number; places: PlaceInfo[]; here?: number; active: boolean; editing: boolean; onPatch: (p: Doc) => void }) {
-  const H = g.ph * scale, fs = g.fs;
-  const cap = (text?: string) => <Cap text={text} size={fs * 0.72} />;
+  const fs = g.fs, bleed = !!b.bleed && bleedable(b);
+  // 图的高度：不超出版心；满屏出血的铺满舞台。和站点一样，自由排布的画布高一点
+  const H = bleed ? g.S : Math.min(g.ph * (b.type === 'free' ? 1.04 : 1) * scale, g.inner);
+  // 出血的图，图注压在图上
+  const cap = (text?: string) => (bleed ? (text ? <p className="absolute bottom-2 left-2.5 text-(length:--fs) text-white [text-shadow:0_1px_6px_rgb(0_0_0/.45)]" style={{ '--fs': px(fs * 0.72) }}>{text}</p> : null) : <Cap text={text} size={fs * 0.72} />);
   switch (b.type) {
     case 'text': case 'head': {
       const v = b.writing === 'v';
-      return <TextFace b={b} v={v} fs={fs} align={b.align} editing={editing} size={b.type === 'head' ? undefined : v ? g.ph * 0.92 * scale : fs * 23} />;
+      const head = b.type === 'head';
+      return <TextFace b={b} v={v} fs={fs} align={b.align} editing={editing} minH={g.th} size={v ? (head ? g.th : Math.min(g.th * scale, g.inner)) : head ? undefined : fs * 23 * scale} />;
     }
     case 'image':
-      return <figure className="max-w-(--mw)" style={{ '--mw': px(g.S * 2.2), '--h': px(H) }}><Img src={b.src} className="h-(--h) w-auto" />{cap(b.caption)}</figure>;
+      return <figure className="relative max-w-(--mw)" style={{ '--mw': px(g.S * 2.2), '--h': px(H) }}><Img src={b.src} className="h-(--h) w-auto" />{cap(b.caption)}</figure>;
     case 'pair':
-      return <figure><div className="flex gap-(--gap)" style={{ '--gap': px(fs * 0.8), '--h': px(H) }}>{b.images.map((im: Doc, i: number) => <figure key={i}><Img src={im.src} className="h-(--h) w-auto" />{cap(im.caption)}</figure>)}</div></figure>;
+      return <figure><div className={cn('flex', !bleed && 'gap-(--gap)')} style={{ '--gap': px(fs * 0.8), '--h': px(H) }}>{b.images.map((im: Doc, i: number) => <figure key={i} className="relative"><Img src={im.src} className="h-(--h) w-auto" />{cap(im.caption)}</figure>)}</div></figure>;
     case 'grid': {
       const cell = H / 2 - 5, n = b.images.length;
       return (
         <figure>
           <div className="grid auto-cols-(--col) grid-flow-col grid-rows-[repeat(2,var(--cell))] gap-2.5" style={{ '--cell': px(cell), '--col': px((cell * 4) / 3) }}>
-            {b.images.map((im: Doc, i: number) => <figure key={i} className={cn('flex min-w-0 flex-col', i === 0 ? 'row-[span_2] col-[span_2]' : i === n - 1 && n > 1 && 'row-[span_2]')}><Img src={im.src} className="min-h-0 w-full flex-1" />{cap(im.caption)}</figure>)}
+            {b.images.map((im: Doc, i: number) => <figure key={i} className={cn('relative flex min-w-0 flex-col', i === 0 ? 'row-[span_2] col-[span_2]' : i === n - 1 && n > 1 && 'row-[span_2]')}><Img src={im.src} className="min-h-0 w-full flex-1" />{cap(im.caption)}</figure>)}
           </div>
         </figure>
       );
@@ -496,7 +577,7 @@ function Face({ b, g, scale, places, here, active, editing, onPatch }: { b: Doc;
     case 'strip':
       return <StripFace b={b} H={H} fs={fs} rtl={g.rtl} active={active} onPatch={onPatch} />;
     case 'free':
-      return <FreeFace b={b} h={g.ph * 1.04 * scale} fs={fs} active={active} onPatch={onPatch} />;
+      return <FreeFace b={b} h={H} fs={fs} active={active} onPatch={onPatch} />;
     case 'map':
       return <MiniMap places={places} here={b.scope === 'near' ? here : undefined} w={g.S * 0.78} h={g.S * 0.52} fs={fs} />;
   }

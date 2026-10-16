@@ -19,7 +19,7 @@ import { Input } from '@/components/ui/input';
 import { useLayout } from './layout-ctx';
 import { InlineField } from './inline-field';
 import { formatSel, readSel } from './layout-text';
-import { NAMES, ToolBtn, blockPlain, r2, scalable, yOf } from './layout-view';
+import { GAP_MAX, GAP_MIN, NAMES, ToolBtn, blockPlain, bleedable, r2, scalable, yOf } from './layout-view';
 
 export function Inspector() {
   const L = useLayout();
@@ -152,26 +152,42 @@ function TextProps({ b, place }: { b: Doc; place: (p: Doc) => void }) {
 /* ───────────── 横滚里的上下位置和大小 ───────────── */
 
 function PlaceProps({ b, raw, place }: { b: Doc; raw: Doc; place: (p: Doc) => void }) {
+  const { its } = useLayout();
   const follow = b.type === 'head' && b.lead && b.y === undefined;
+  const bleed = !!b.bleed && bleedable(b);
+  // 挨着标题的那列文字：间距跟着整组，在标题上改
+  const at = its.findIndex((x) => x.key === b.key);
+  const grouped = b.type === 'text' && its[at - 1]?.type === 'head' && !!its[at - 1]?.lead;
   // 标题没设的位置、大小是跟着正文的，不算它自己的
-  const own = b.type === 'head' ? raw.h?.y !== undefined || raw.h?.scale !== undefined : b.y !== undefined || b.scale !== undefined;
+  const own = b.type === 'head' ? raw.h?.y !== undefined || raw.h?.scale !== undefined || raw.h?.gap !== undefined : b.y !== undefined || b.scale !== undefined || b.gap !== undefined || bleed;
   const pct = (v?: number) => (v === undefined ? undefined : Math.round(v * 100));
   return (
     <Section>
-      <Prop label="上下">
-        <NumInput className="h-8 w-24" min={0} max={100} value={follow ? undefined : pct(b.y ?? yOf(b))} placeholder={follow ? '跟着正文' : undefined}
-          onChange={(v) => place({ y: v === undefined ? undefined : r2(Math.min(100, Math.max(0, v)) / 100) })} />
-        <span className="text-12 text-muted-foreground">%</span>
-      </Prop>
-      {scalable(b) && (
-        <Prop label="大小">
-          <NumInput className="h-8 w-24" min={30} max={160} value={pct(b.scale ?? 1)} onChange={(v) => place({ scale: v === undefined || v === 100 ? undefined : r2(Math.min(160, Math.max(30, v)) / 100) })} />
+      {bleedable(b) && (
+        <Prop label="范围"><Segmented size="sm" value={bleed ? 'bleed' : 'band'} onValueChange={(v) => place({ bleed: v === 'bleed' || undefined })} options={[{ value: 'band', label: '版心' }, { value: 'bleed', label: '满屏' }]} /></Prop>
+      )}
+      {!bleed && (
+        <Prop label="上下">
+          <NumInput className="h-8 w-24" min={0} max={100} value={follow ? undefined : pct(b.y ?? yOf(b))} placeholder={follow ? '跟着正文' : undefined}
+            onChange={(v) => place({ y: v === undefined ? undefined : r2(Math.min(100, Math.max(0, v)) / 100) })} />
+          <span className="text-12 text-muted-foreground">%</span>
+        </Prop>
+      )}
+      {scalable(b) && !bleed && (
+        <Prop label={b.type === 'text' && b.writing !== 'v' ? '宽度' : '大小'}>
+          <NumInput className="h-8 w-24" min={30} max={b.type === 'text' && b.writing !== 'v' ? 240 : 160} value={pct(b.scale ?? 1)} onChange={(v) => place({ scale: v === undefined || v === 100 ? undefined : r2(Math.min(b.type === 'text' && b.writing !== 'v' ? 240 : 160, Math.max(30, v)) / 100) })} />
+          <span className="text-12 text-muted-foreground">%</span>
+        </Prop>
+      )}
+      {!grouped && (
+        <Prop label="间距">
+          <NumInput className="h-8 w-24" min={GAP_MIN * 100} max={GAP_MAX * 100} step={25} value={pct(b.gap ?? 1)} onChange={(v) => place({ gap: v === undefined || v === 100 ? undefined : r2(Math.min(GAP_MAX * 100, Math.max(GAP_MIN * 100, v)) / 100) })} />
           <span className="text-12 text-muted-foreground">%</span>
         </Prop>
       )}
       {own && (
         <Prop label="">
-          <Button size="sm" variant="ghost" className="-ml-3" onClick={() => place({ y: undefined, scale: undefined })}><RotateCcw size={13} />{b.type === 'head' && b.lead ? '回到正文旁' : '复位'}</Button>
+          <Button size="sm" variant="ghost" className="-ml-3" onClick={() => place({ y: undefined, scale: undefined, gap: undefined, bleed: undefined })}><RotateCcw size={13} />{b.type === 'head' && b.lead ? '回到正文旁' : '复位'}</Button>
         </Prop>
       )}
     </Section>

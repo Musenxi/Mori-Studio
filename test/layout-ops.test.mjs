@@ -133,3 +133,13 @@ test('坐标输入：Plus Code（全码、带城市名的短码）和 Google 地
   near(places.parseCoordinate('https://www.google.com/maps/place/x/data=!3d35.0116!4d135.7681'), [135.7681, 35.0116]);
   assert.equal(places.parseCoordinate('hello+world'), null);
 });
+
+test('间距 gap、满屏 bleed 写在 h 里，项上读得到；去掉就删', () => {
+  let d = ops.setPlace(doc(), 's01', { gap: 0, bleed: true });
+  assert.deepEqual(d.blocks.find((b) => b.id === 's01').h, { y: 0.2, gap: 0, bleed: true });
+  assert.deepEqual([ops.itemsOf(d)[2].gap, ops.itemsOf(d)[2].bleed], [0, true]);
+  d = ops.setPlace(d, 'b01', { gap: 2 });
+  assert.equal(ops.itemsOf(d)[1].gap, 2);
+  d = ops.setPlace(d, 's01', { gap: undefined, bleed: undefined });
+  assert.deepEqual(d.blocks.find((b) => b.id === 's01').h, { y: 0.2 });
+});
