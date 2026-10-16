@@ -9,12 +9,19 @@ import { Input } from '@/components/ui/input';
 import { OptionSelect } from '@/components/option-select';
 import { formatLatLng, parseCoordinate, shortCodeOf } from '@/lib/places.js';
 
-export interface PlaceValue { lnglat?: [number, number]; en?: string; date?: string; region?: 'new' | 'same' }
+export type Transport = 'walk' | 'bike' | 'car' | 'train' | 'plane' | 'boat' | 'none';
+export interface PlaceValue { lnglat?: [number, number]; en?: string; date?: string; region?: 'new' | 'same'; by?: Transport }
 
 /** 地图分区：自动按远近分；从这里另起一个区域；接着上一处（不管多远） */
 const REGIONS = [{ value: 'auto', label: '区域：自动' }, { value: 'new', label: '区域：从这里另起' }, { value: 'same', label: '区域：接上一处' }];
 export function RegionSelect({ value, onChange }: { value?: 'new' | 'same'; onChange: (v: 'new' | 'same' | undefined) => void }) {
   return <OptionSelect value={value ?? 'auto'} onValueChange={(v) => onChange(v === 'auto' ? undefined : (v as 'new' | 'same'))} options={REGIONS} />;
+}
+
+/** 从上一处怎么到这里的：路线按它画（飞机画弧线，不连线就断开） */
+const BY: Array<[string, string]> = [['auto', '不写'], ['walk', '步行'], ['bike', '骑车'], ['car', '开车'], ['train', '火车'], ['plane', '飞机'], ['boat', '船'], ['none', '不连线']];
+export function TransportSelect({ value, onChange, prefix = '' }: { value?: Transport; onChange: (v: Transport | undefined) => void; prefix?: string }) {
+  return <OptionSelect value={value ?? 'auto'} onValueChange={(v) => onChange(v === 'auto' ? undefined : (v as Transport))} options={BY.map(([v, l]) => ({ value: v, label: prefix + l }))} />;
 }
 
 /**
@@ -80,12 +87,15 @@ export function PlaceFields({ value, onChange, reference }: { value: PlaceValue;
       <LatLngInput value={value.lnglat} reference={reference} onChange={(lnglat) => onChange({ lnglat })} />
       <Input value={value.en ?? ''} placeholder="英文名" onChange={(e) => onChange({ en: e.target.value })} />
       <Input value={value.date ?? ''} placeholder="日期" onChange={(e) => onChange({ date: e.target.value })} />
-      <div className="col-span-3"><RegionSelect value={value.region} onChange={(region) => onChange({ region })} /></div>
+      <div className="col-span-3 grid grid-cols-2 gap-1.5">
+        <TransportSelect prefix="到这里：" value={value.by} onChange={(by) => onChange({ by })} />
+        <RegionSelect value={value.region} onChange={(region) => onChange({ region })} />
+      </div>
     </div>
   );
 }
 
-export interface PlaceForm { label: string; lnglat?: [number, number]; en?: string; date?: string; region?: 'new' | 'same' }
+export interface PlaceForm { label: string; lnglat?: [number, number]; en?: string; date?: string; region?: 'new' | 'same'; by?: Transport }
 
 /** 在 Markdown 里把选中的文字设为地点，或修改光标所在的地点 */
 export function PlaceDialog({ open, onOpenChange, initial, editing, onSubmit, onRemove, reference }: {
@@ -110,6 +120,7 @@ function PlaceDialogBody({ reference, initial, editing, onSubmit, onRemove, onCa
         <Field label="坐标"><LatLngInput autoFocus={!!v.label} reference={reference} value={v.lnglat} onChange={(lnglat) => setV({ ...v, lnglat })} /></Field>
         <Field label="英文名"><Input value={v.en ?? ''} onChange={(e) => setV({ ...v, en: e.target.value })} /></Field>
         <Field label="日期"><Input value={v.date ?? ''} onChange={(e) => setV({ ...v, date: e.target.value })} /></Field>
+        <Field label="怎么到的"><TransportSelect value={v.by} onChange={(by) => setV({ ...v, by })} /></Field>
         <Field label="地图区域"><RegionSelect value={v.region} onChange={(region) => setV({ ...v, region })} /></Field>
         <div className="mt-4 flex items-center gap-2">
           {editing && <Button type="button" variant="ghost-danger" onClick={onRemove}>去掉地点</Button>}

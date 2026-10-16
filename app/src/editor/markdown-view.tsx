@@ -88,7 +88,7 @@ export function MarkdownView({ doc, setDoc }: { doc: Doc; setDoc: (fn: (d: Doc) 
   const openPin = () => {
     const target = ed.current!.placeTarget();
     const m = target.href ? parsePlaceHref(target.href) : null;
-    setPin({ target, editing: !!m, initial: { label: target.label, lnglat: m?.lnglat, en: m?.en, date: m?.date, region: m?.region } });
+    setPin({ target, editing: !!m, initial: { label: target.label, lnglat: m?.lnglat, en: m?.en, date: m?.date, region: m?.region, by: m?.by } });
   };
   const run = (cmd: (typeof TOOLS)[number]['cmd']) => {
     if (cmd === 'image') setLib(true);
@@ -141,7 +141,7 @@ export function MarkdownView({ doc, setDoc }: { doc: Doc; setDoc: (fn: (d: Doc) 
         initial={place?.initial ?? { label: '' }} editing={!!place?.editing}
         onSubmit={(v) => {
           const t = place!.target;
-          ed.current?.replaceRange(t.from, t.to, `[${v.label.replace(/[[\]]/g, '')}](${placeHref({ lnglat: v.lnglat, en: v.en, date: v.date, region: v.region })})`);
+          ed.current?.replaceRange(t.from, t.to, `[${v.label.replace(/[[\]]/g, '')}](${placeHref({ lnglat: v.lnglat, en: v.en, date: v.date, region: v.region, by: v.by })})`);
           // 第一次标地点：地图跟着打开（不然标了也看不到）
           if (!doc.map && !placesOf(doc.blocks ?? []).length) setDoc((d) => (d.map ? d : { ...d, map: true }));
           setPin(null);
