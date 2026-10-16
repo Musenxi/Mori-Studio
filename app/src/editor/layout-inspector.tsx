@@ -142,10 +142,32 @@ function TextProps({ b, place }: { b: Doc; place: (p: Doc) => void }) {
     <Section>
       <Prop label="写法"><Segmented size="sm" value={writing} onValueChange={(v) => place({ writing: v })} options={[{ value: 'h', label: '横排' }, { value: 'v', label: '竖排' }]} /></Prop>
       <Prop label="对齐"><Segmented size="sm" value={align} onValueChange={(v) => place({ align: v })} options={labels.map((label, i) => ({ value: ['start', 'center', 'end', 'justify'][i], label }))} /></Prop>
+      {/* 文本框：横滚里宽高是屏高的百分比；竖滚里左边位置和宽是页宽的百分比，高是屏高的百分比。空着是自动 */}
+      {axis === 'v' && <BoxNum label="左边" value={b.vx} max={100} onChange={(v) => place({ vx: v })} />}
+      <BoxNum label="宽" value={axis === 'v' ? b.vbw : b.bw} max={axis === 'v' ? 100 : 1000} onChange={(v) => place({ bw: v })} />
+      <BoxNum label="高" value={axis === 'v' ? b.vbh : b.bh} max={100} onChange={(v) => place({ bh: v })} />
+      <Prop label="字号">
+        <NumInput className="h-8 w-24" min={50} max={400} step={10} value={Math.round(((axis === 'v' ? b.vfs : b.fs) ?? 1) * 100)} onChange={(v) => place({ fs: v === undefined || v === 100 ? undefined : r2(Math.min(400, Math.max(50, v)) / 100) })} />
+        <span className="text-12 text-muted-foreground">%</span>
+      </Prop>
+      <Prop label="行距">
+        <NumInput className="h-8 w-24" min={1} max={4} step={0.1} value={axis === 'v' ? b.vlh : b.lh} placeholder={vw ? '2.05' : '1.9'} onChange={(v) => place({ lh: v === undefined ? undefined : Math.round(Math.min(4, Math.max(1, v)) * 100) / 100 })} />
+      </Prop>
       {axis === 'v' && vw && b.type === 'text' && (
         <Prop label="位置"><Segmented size="sm" value={b.vpos ?? 'end'} onValueChange={(v) => place({ pos: v })} options={[{ value: 'start', label: '靠左' }, { value: 'center', label: '居中' }, { value: 'end', label: '靠右' }]} /></Prop>
       )}
     </Section>
+  );
+}
+
+/** 文本框的一个尺寸（百分比，空着是自动） */
+function BoxNum({ label, value, max, onChange }: { label: string; value?: number; max: number; onChange: (v: number | undefined) => void }) {
+  return (
+    <Prop label={label}>
+      <NumInput className="h-8 w-24" min={0} max={max} step={5} value={value === undefined ? undefined : Math.round(value * 100)} placeholder="自动"
+        onChange={(v) => onChange(v === undefined || v <= 0 ? undefined : r2(Math.min(max, v) / 100))} />
+      <span className="text-12 text-muted-foreground">%</span>
+    </Prop>
   );
 }
 
@@ -159,10 +181,18 @@ function PlaceProps({ b, raw, place }: { b: Doc; raw: Doc; place: (p: Doc) => vo
   const at = its.findIndex((x) => x.key === b.key);
   const grouped = b.type === 'text' && its[at - 1]?.type === 'head' && !!its[at - 1]?.lead;
   // 标题没设的位置、大小是跟着正文的，不算它自己的
-  const own = b.type === 'head' ? raw.h?.y !== undefined || raw.h?.scale !== undefined || raw.h?.gap !== undefined : b.y !== undefined || b.scale !== undefined || b.gap !== undefined || bleed;
+  const float = b.x !== undefined;
+  const own = b.type === 'head' ? raw.h?.y !== undefined || raw.h?.scale !== undefined || raw.h?.gap !== undefined || float : b.y !== undefined || b.scale !== undefined || b.gap !== undefined || bleed || float;
   const pct = (v?: number) => (v === undefined ? undefined : Math.round(v * 100));
   return (
     <Section>
+      <Prop label="排法"><Segmented size="sm" value={float ? 'float' : 'flow'} onValueChange={(v) => place({ x: v === 'float' ? 0 : undefined })} options={[{ value: 'flow', label: '随文' }, { value: 'float', label: '浮动' }]} /></Prop>
+      {float && (
+        <Prop label="左右">
+          <NumInput className="h-8 w-24" min={-2000} max={2000} step={5} value={Math.round(b.x * 100)} onChange={(v) => place({ x: v === undefined ? 0 : r2(Math.min(2000, Math.max(-2000, v)) / 100) })} />
+          <span className="text-12 text-muted-foreground">%</span>
+        </Prop>
+      )}
       {bleedable(b) && (
         <Prop label="范围"><Segmented size="sm" value={bleed ? 'bleed' : 'band'} onValueChange={(v) => place({ bleed: v === 'bleed' || undefined })} options={[{ value: 'band', label: '版心' }, { value: 'bleed', label: '满屏' }]} /></Prop>
       )}
@@ -179,7 +209,7 @@ function PlaceProps({ b, raw, place }: { b: Doc; raw: Doc; place: (p: Doc) => vo
           <span className="text-12 text-muted-foreground">%</span>
         </Prop>
       )}
-      {!grouped && (
+      {!grouped && !float && (
         <Prop label="间距">
           <NumInput className="h-8 w-24" min={GAP_MIN * 100} max={GAP_MAX * 100} step={25} value={pct(b.gap ?? 1)} onChange={(v) => place({ gap: v === undefined || v === 100 ? undefined : r2(Math.min(GAP_MAX * 100, Math.max(GAP_MIN * 100, v)) / 100) })} />
           <span className="text-12 text-muted-foreground">%</span>
@@ -187,7 +217,7 @@ function PlaceProps({ b, raw, place }: { b: Doc; raw: Doc; place: (p: Doc) => vo
       )}
       {own && (
         <Prop label="">
-          <Button size="sm" variant="ghost" className="-ml-3" onClick={() => place({ y: undefined, scale: undefined, gap: undefined, bleed: undefined })}><RotateCcw size={13} />{b.type === 'head' && b.lead ? '回到正文旁' : '复位'}</Button>
+          <Button size="sm" variant="ghost" className="-ml-3" onClick={() => place({ y: undefined, scale: undefined, gap: undefined, bleed: undefined, x: undefined })}><RotateCcw size={13} />{b.type === 'head' && b.lead ? '回到正文旁' : '复位'}</Button>
         </Prop>
       )}
     </Section>

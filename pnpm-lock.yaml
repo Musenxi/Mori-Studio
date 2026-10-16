@@ -110,7 +110,7 @@ importers:
         version: 8.71.1(eslint@10.12.0(jiti@2.7.0))(typescript@6.0.3)
       astro-mori:
         specifier: github:Musenxi/Astro-Theme-Mori
-        version: https://codeload.github.com/Musenxi/Astro-Theme-Mori/tar.gz/a7e065ce2f977351a07412f3a2b98ec28131fe46(@types/node@26.6.4)(jiti@2.7.0)(vite@8.3.4(@types/node@26.6.4)(jiti@2.7.0)(yaml@2.9.1))(yaml@2.9.1)
+        version: https://codeload.github.com/Musenxi/Astro-Theme-Mori/tar.gz/9c27e9f47babc4f0e6a48f424073d54ad915d1a1(@types/node@26.6.4)(jiti@2.7.0)(vite@8.3.4(@types/node@26.6.4)(jiti@2.7.0)(yaml@2.9.1))(yaml@2.9.1)
       eslint:
         specifier: ^10.11.0
         version: 10.12.0(jiti@2.7.0)
@@ -2058,8 +2058,8 @@ packages:
     resolution: {integrity: sha512-COROpnaoap1E2F000S62r6A60uHZnmlvomhfyT2DlTcrY1OrBKn2UhH7qn5wTC9zMvD0AY7csdPSNwKP+7WiQw==}
     engines: {node: '>= 0.4'}
 
-  astro-mori@https://codeload.github.com/Musenxi/Astro-Theme-Mori/tar.gz/a7e065ce2f977351a07412f3a2b98ec28131fe46:
-    resolution: {tarball: https://codeload.github.com/Musenxi/Astro-Theme-Mori/tar.gz/a7e065ce2f977351a07412f3a2b98ec28131fe46}
+  astro-mori@https://codeload.github.com/Musenxi/Astro-Theme-Mori/tar.gz/9c27e9f47babc4f0e6a48f424073d54ad915d1a1:
+    resolution: {tarball: https://codeload.github.com/Musenxi/Astro-Theme-Mori/tar.gz/9c27e9f47babc4f0e6a48f424073d54ad915d1a1}
     version: 0.0.1
     hasBin: true
 
@@ -5587,7 +5587,7 @@ snapshots:
 
   aria-query@5.3.2: {}
 
-  astro-mori@https://codeload.github.com/Musenxi/Astro-Theme-Mori/tar.gz/a7e065ce2f977351a07412f3a2b98ec28131fe46(@types/node@26.6.4)(jiti@2.7.0)(vite@8.3.4(@types/node@26.6.4)(jiti@2.7.0)(yaml@2.9.1))(yaml@2.9.1):
+  astro-mori@https://codeload.github.com/Musenxi/Astro-Theme-Mori/tar.gz/9c27e9f47babc4f0e6a48f424073d54ad915d1a1(@types/node@26.6.4)(jiti@2.7.0)(vite@8.3.4(@types/node@26.6.4)(jiti@2.7.0)(yaml@2.9.1))(yaml@2.9.1):
     dependencies:
       '@fontsource/special-elite': 5.3.0
       '@shikijs/transformers': 4.4.3

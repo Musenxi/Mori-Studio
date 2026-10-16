@@ -6,7 +6,7 @@
  * 看这篇文章的读法设置决定摆哪一种：只允许横向 → 横滚排版；只允许竖向 / 混合（或没设读法）→ 竖向排版；两边都允许 → 工具条上能切换。
  */
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Heading2, ImagePlus, Map as MapIcon, Pilcrow, Redo2, Undo2 } from 'lucide-react';
+import { Heading2, ImagePlus, Map as MapIcon, Pilcrow, Redo2, RotateCcw, Undo2 } from 'lucide-react';
 import { placesOf } from 'astro-mori/flow';
 import type { Doc } from '@/lib/types';
 import * as ops from '@/lib/layout-ops.js';
@@ -128,6 +128,13 @@ export function LayoutView({ doc, setDoc }: { doc: Doc; setDoc: (fn: (d: Doc) =>
     stopEdit();
   };
 
+  /** 重置排版：这一种读法里的位置、大小、间距、浮动、字号、行距、对齐都回到默认 */
+  const reset = async () => {
+    if (!(await confirm({ title: '重置排版？', description: '可以用 ⌘Z 撤销。', confirmLabel: '重置', danger: true }))) return;
+    stopEdit();
+    commit(ops.resetLayout(doc, axis));
+  };
+
   /** 插到选中的块后面（没选中就放最后）；插入文字、标题后直接开始打字 */
   const insert = (block: Doc, type?: boolean) => {
     const r = ops.insertAfter(doc, selected?.key ?? null, block);
@@ -155,6 +162,7 @@ export function LayoutView({ doc, setDoc }: { doc: Doc; setDoc: (fn: (d: Doc) =>
           <ToolBtn label="地图" onClick={() => insert({ type: 'map', scope: 'region' })}><MapIcon size={15} /></ToolBtn>
           <span className="ml-auto flex items-center gap-0.5">
             <Segmented size="sm" className="mr-1.5" value={zoom} onValueChange={setZoom} options={[{ value: 's', label: '小' }, { value: 'm', label: '中' }, { value: 'l', label: '大' }]} />
+            <ToolBtn label="重置排版" onClick={() => void reset()}><RotateCcw size={15} /></ToolBtn>
             <ToolBtn label="撤销　⌘Z" disabled={!hist.canUndo} onClick={undo}><Undo2 size={15} /></ToolBtn>
             <ToolBtn label="重做　⇧⌘Z" disabled={!hist.canRedo} onClick={redo}><Redo2 size={15} /></ToolBtn>
           </span>

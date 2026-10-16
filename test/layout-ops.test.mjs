@@ -143,3 +143,26 @@ test('间距 gap、满屏 bleed 写在 h 里，项上读得到；去掉就删', 
   d = ops.setPlace(d, 's01', { gap: undefined, bleed: undefined });
   assert.deepEqual(d.blocks.find((b) => b.id === 's01').h, { y: 0.2 });
 });
+
+test('浮动 x、字号行距：x 写在 h，字号行距写在当前读法那边；重置排版只清那一边、写法留着', () => {
+  let d = ops.setPlace(doc(), 's01', { x: 0.4 });
+  d = ops.setPlace(d, 'b01', { fs: 1.5, lh: 2.2, writing: 'v' });
+  d = ops.setPlace(d, 'b01', { fs: 0.9 }, 'v');
+  assert.deepEqual(d.blocks.find((b) => b.id === 'b02').h, { fs: 1.5, lh: 2.2, writing: 'v' });
+  assert.deepEqual([ops.itemsOf(d)[1].fs, ops.itemsOf(d)[1].vfs, ops.itemsOf(d)[2].x], [1.5, 0.9, 0.4]);
+  const r = ops.resetLayout(d, 'h');
+  assert.deepEqual(r.blocks.find((b) => b.id === 'b01').h, { writing: 'v' });
+  assert.equal(r.blocks.find((b) => b.id === 's01').h, undefined);
+  assert.deepEqual(r.blocks.find((b) => b.id === 'b01').v, { fs: 0.9 });
+  assert.equal(ops.resetLayout(r, 'h'), r);
+});
+
+test('文本框宽高：bw / bh 写在当前读法那边，竖滚的左边位置 vx 写成 v.x；重置时一起清掉', () => {
+  let d = ops.setPlace(doc(), 'b01', { bw: 0.6, bh: 0.4 });
+  d = ops.setPlace(d, 'b01', { vx: 0.1, bw: 0.7 }, 'v');
+  assert.deepEqual(d.blocks.find((b) => b.id === 'b02').h, { bw: 0.6, bh: 0.4 });
+  assert.deepEqual(d.blocks.find((b) => b.id === 'b02').v, { bw: 0.7, x: 0.1 });
+  const it = ops.itemsOf(d)[1];
+  assert.deepEqual([it.bw, it.bh, it.vx, it.vbw, it.vbh], [0.6, 0.4, 0.1, 0.7, undefined]);
+  assert.equal(ops.resetLayout(ops.resetLayout(d, 'h'), 'v').blocks.find((b) => b.id === 'b01').v, undefined);
+});

@@ -6,8 +6,8 @@
  */
 import { columns, TEXT_BLOCKS, WRITING_BLOCKS } from 'astro-mori/flow';
 
-/** 横滚里的摆法：上下位置、缩放、和前一块的间距（标准间距的倍数）、图片满屏出血 */
-const PLACE_KEYS = ['y', 'scale', 'gap', 'bleed'];
+/** 横滚里的摆法：上下位置、缩放、和前一块的间距（标准间距的倍数）、图片满屏出血、浮起来的左右位置（屏高的倍数） */
+const PLACE_KEYS = ['y', 'scale', 'gap', 'bleed', 'x'];
 const place = (o) => Object.fromEntries(PLACE_KEYS.filter((k) => o[k] !== undefined).map((k) => [k, o[k]]));
 
 /**
@@ -18,7 +18,7 @@ const place = (o) => Object.fromEntries(PLACE_KEYS.filter((k) => o[k] !== undefi
  */
 export function itemsOf(doc) {
   return columns(doc.blocks ?? []).map((c) => (c.kind === 'text'
-    ? { key: c.blocks[0].id, type: c.head ? 'head' : 'text', writing: c.writing, vwriting: c.vwriting, align: c.align, valign: c.valign, pos: c.pos, vpos: c.vpos, ...place(c), ...(c.lead ? { lead: true } : {}), blocks: c.blocks }
+    ? { key: c.blocks[0].id, type: c.head ? 'head' : 'text', writing: c.writing, vwriting: c.vwriting, align: c.align, valign: c.valign, pos: c.pos, vpos: c.vpos, fs: c.fs, lh: c.lh, bw: c.bw, bh: c.bh, vfs: c.vfs, vlh: c.vlh, vx: c.vx, vbw: c.vbw, vbh: c.vbh, ...place(c), ...(c.lead ? { lead: true } : {}), blocks: c.blocks }
     : { ...c.block, key: c.block.id, ...place(c.block.h ?? {}) }));
 }
 
@@ -48,7 +48,7 @@ export function nudgeItem(doc, key, dir) {
 
 /**
  * 改一项的位置、缩放、间距、出血、竖排、对齐。undefined 表示去掉这个设置。
- * y / scale / gap / bleed 是横滚的（写在块的 h 里）；writing、align、pos 写在 axis 指的那一边（'h' 横滚 / 'v' 竖滚），另一边不动。
+ * y / scale / gap / bleed / x 是横滚的（写在块的 h 里）；writing、align、pos、fs、lh 写在 axis 指的那一边（'h' 横滚 / 'v' 竖滚），另一边不动。
  * 一列文字里，位置和缩放写在每个块上（删掉第一个块也不丢）；竖排只写在能竖排的块上。
  */
 export function setPlace(doc, key, patch, axis = 'h') {
@@ -71,8 +71,26 @@ export function setPlace(doc, key, patch, axis = 'h') {
     if ('writing' in patch && text) put(o, axis, { writing: patch.writing === 'v' ? 'v' : patch.writing === 'h' && it.type === 'head' ? 'h' : undefined });
     if ('align' in patch && text) put(o, axis, { align: patch.align });
     if ('pos' in patch && text) put(o, axis, { pos: patch.pos });
+    // 字号、行距、文本框的宽高：一列里每个文字块都写（和对齐一样）；竖滚里文本框的左右位置是 vx（写成 v.x）
+    for (const k of ['fs', 'lh', 'bw', 'bh']) if (k in patch && text) put(o, axis, { [k]: patch[k] });
+    if ('vx' in patch && text) put(o, 'v', { x: patch.vx });
     return o;
   }) };
+}
+
+/** 重置排版：去掉 axis 那一边所有的摆法（位置、大小、文本框宽高、间距、出血、浮动、字号、行距、对齐），横排竖排的写法留着 */
+export function resetLayout(doc, axis = 'h') {
+  const keys = axis === 'h' ? [...PLACE_KEYS, 'fs', 'lh', 'bw', 'bh', 'align', 'pos'] : ['x', 'bw', 'bh', 'fs', 'lh', 'align', 'pos'];
+  let changed = false;
+  const blocks = (doc.blocks ?? []).map((b) => {
+    if (!b[axis] || !keys.some((k) => k in b[axis])) return b;
+    changed = true;
+    const side = Object.fromEntries(Object.entries(b[axis]).filter(([k]) => !keys.includes(k)));
+    const o = { ...b };
+    if (Object.keys(side).length) o[axis] = side; else delete o[axis];
+    return o;
+  });
+  return changed ? { ...doc, blocks } : doc;
 }
 
 /** 改一个块自己的字段（图片的版式、图注、地图范围……） */
