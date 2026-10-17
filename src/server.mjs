@@ -334,14 +334,20 @@ export async function startStudio({ root, port = 4400, dev = false }) {
         });
       }
 
-      /* ── 仪表盘数字：本地能算的现算；阅读量、在线访客来自评论服务（连不上给 null）；点赞还没有 ── */
+      /* ── 仪表盘数字：本地能算的现算；阅读量、点赞、在线访客来自评论服务（连不上给 null；老版本的服务没有点赞，也是 null） ── */
       if (req.method === 'GET' && p === '/api/stats') {
         const entries = listEntries(root);
         const [cn, tr] = await Promise.all([commentNumbers(), commentsEndpoint() && adminToken() ? comments.traffic().catch(() => null) : null]);
         return send(res, 200, {
           pages: countPages(root), categories: (config.categories ?? []).length, words: entries.reduce((a, e) => a + (e.words ?? 0), 0),
-          comments: cn ? { total: cn.total, unread: cn.unread } : null, views: tr?.views ?? null, online: tr?.online ?? null, likes: null,
+          comments: cn ? { total: cn.total, unread: cn.unread } : null, views: tr?.views ?? null, online: tr?.online ?? null, likes: tr?.likes ?? null,
         });
+      }
+
+      /* ── 每篇的阅读量、点赞数（文章列表用）：没连评论服务给 null；老版本的服务没有点赞，likes 是 null ── */
+      if (req.method === 'GET' && p === '/api/traffic') {
+        const tr = commentsEndpoint() && adminToken() ? await comments.traffic().catch(() => null) : null;
+        return send(res, 200, { entries: tr ? Object.fromEntries((tr.entries ?? []).map((e) => [e.entry, { views: e.views ?? 0, likes: e.likes ?? null }])) : null });
       }
 
       /* ── 分类：整个数组重写；改 id 时用到它的文章一起改 ── */

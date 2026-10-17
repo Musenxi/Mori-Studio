@@ -1,4 +1,4 @@
-import type { Doc, Friend, Kind, NavItem, Project, PublishConfig, Stats, Action } from './types';
+import type { Doc, Friend, Kind, NavItem, Project, PublishConfig, Stats, Traffic, Action } from './types';
 
 export class ApiError extends Error {
   status: number;
@@ -71,6 +71,7 @@ async function stream(url: string, onChunk: (all: string) => void): Promise<numb
 export const api = {
   project: () => req<Project>('GET', '/api/project'),
   stats: () => req<Stats>('GET', '/api/stats'),
+  traffic: () => req<Traffic>('GET', '/api/traffic'),
   emoji: () => req<{ packs: EmojiPack[] }>('GET', '/api/emoji'),
   emojiPacks: () => req<{ packs: ManagedPack[] }>('GET', '/api/emoji/packs'),
   createEmojiPack: (id: string) => req<{ ok: true; id: string }>('POST', '/api/emoji/packs', { id }),

@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router';
 import { ArrowDown, ArrowUp, Eye, FilePen, MoreHorizontal, PenLine, Pencil, Search, Send, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -16,7 +17,7 @@ import { Body, Empty, PageHeader } from '@/components/page';
 import { Segmented } from '@/components/segmented';
 import { OptionSelect } from '@/components/option-select';
 
-type SortKey = 'title' | 'category' | 'date' | 'words';
+type SortKey = 'title' | 'category' | 'date' | 'words' | 'views' | 'likes';
 const ALL = '__all__';
 
 export default function PostList({ view }: { view: 'all' | 'draft' }) {
@@ -31,6 +32,10 @@ export default function PostList({ view }: { view: 'all' | 'draft' }) {
   const [sort, setSort] = useState<[SortKey, 1 | -1]>(['date', -1]);
   const [compose, setCompose] = useState(false);
 
+  const isMori = project?.comments.provider === 'mori' && project.comments.hasToken;
+  const { data: traffic } = useQuery({ queryKey: ['traffic'], queryFn: api.traffic, enabled: !!isMori, staleTime: 10_000 });
+  const counts = traffic?.entries;
+  const countOf = useCallback((e: EntrySummary, k: 'views' | 'likes') => counts?.[`posts/${e.id}`]?.[k] ?? 0, [counts]);
   const cats = useMemo(() => project?.config.categories ?? [], [project?.config.categories]);
   const catName = useCallback((id?: string) => cats.find((c) => c.id === id)?.zh ?? id ?? '', [cats]);
   const base = useMemo(() => (project?.entries ?? []).filter((e) => (view === 'draft' ? e.draft || e.changed : true)), [project, view]);
@@ -42,12 +47,12 @@ export default function PostList({ view }: { view: 'all' | 'draft' }) {
       (cat === ALL || e.category === cat) && (tag === ALL || e.tags.includes(tag)) &&
       (view === 'draft' || status === 'all' || (status === 'draft') === (e.draft || e.changed)));
     const [key, dir] = sort;
-    const val = (e: EntrySummary) => (key === 'category' ? catName(e.category) : e[key]);
+    const val = (e: EntrySummary) => (key === 'category' ? catName(e.category) : key === 'views' || key === 'likes' ? countOf(e, key) : e[key]);
     return [...list].sort((a, b) => {
       const x = val(a), y = val(b);
       return (typeof x === 'number' && typeof y === 'number' ? x - y : String(x).localeCompare(String(y), 'zh')) * dir;
     });
-  }, [base, q, cat, tag, status, sort, view, catName]);
+  }, [base, q, cat, tag, status, sort, view, catName, countOf]);
 
   const toggleDraft = async (e: EntrySummary) => {
     try {
@@ -71,7 +76,10 @@ export default function PostList({ view }: { view: 'all' | 'draft' }) {
     </button>
   );
 
-  const grid = 'grid grid-cols-[minmax(0,1fr)_5rem_9rem_6rem_3.5rem_4.5rem_2rem] items-center gap-x-4 px-4 max-xl:grid-cols-[minmax(0,1fr)_5rem_6rem_3.5rem_2rem]';
+  // 连着评论服务时多两列：阅读、点赞
+  const grid = counts
+    ? 'grid grid-cols-[minmax(0,1fr)_5rem_9rem_6rem_3.5rem_3.5rem_3rem_4.5rem_2rem] items-center gap-x-4 px-4 max-xl:grid-cols-[minmax(0,1fr)_5rem_6rem_3.5rem_3.5rem_3rem_2rem]'
+    : 'grid grid-cols-[minmax(0,1fr)_5rem_9rem_6rem_3.5rem_4.5rem_2rem] items-center gap-x-4 px-4 max-xl:grid-cols-[minmax(0,1fr)_5rem_6rem_3.5rem_2rem]';
 
   return (
     <>
@@ -96,6 +104,7 @@ export default function PostList({ view }: { view: 'all' | 'draft' }) {
             {head('title', '标题')}{head('category', '分类')}
             <span className="max-xl:hidden text-12 font-medium text-muted-foreground">标签</span>
             {head('date', '日期')}{head('words', '字数', 'justify-end')}
+            {counts && <>{head('views', '阅读', 'justify-end')}{head('likes', '点赞', 'justify-end')}</>}
             <span className="max-xl:hidden text-12 font-medium text-muted-foreground">状态</span><span />
           </div>
           {rows.map((e) => (
@@ -108,6 +117,7 @@ export default function PostList({ view }: { view: 'all' | 'draft' }) {
               <span className="max-xl:hidden flex min-w-0 gap-1 overflow-hidden">{e.tags.slice(0, 3).map((t) => <button key={t} type="button" onClick={() => setTag(t)} className="shrink-0 rounded-full bg-foreground/[.06] px-2.5 py-px text-11-5 text-soft-foreground transition-colors hover:bg-foreground/[.12] hover:text-foreground">{t}</button>)}</span>
               <span className="mono text-soft-foreground">{e.date}</span>
               <span className="mono text-right text-soft-foreground">{e.broken ? '' : wan(e.words)}</span>
+              {counts && <><span className="mono text-right text-soft-foreground">{countOf(e, 'views').toLocaleString()}</span><span className="mono text-right text-soft-foreground">{countOf(e, 'likes').toLocaleString()}</span></>}
               <span className={cn('max-xl:hidden flex items-center gap-1.5 text-12-5', e.draft || e.changed ? 'text-soft-foreground' : 'text-muted-foreground')}><i className={cn('h-1.5 w-1.5 rounded-full', e.draft || e.changed ? 'border border-soft-foreground' : 'bg-muted-foreground/60')} />{e.draft ? '草稿' : e.changed ? '有草稿' : '已发布'}</span>
               <Menu>
                 <MenuTrigger asChild><button type="button" aria-label="更多" className="grid h-8 w-8 place-items-center rounded-full text-muted-foreground opacity-0 transition-[opacity,background-color] hover:bg-foreground/[.08] hover:text-foreground focus:opacity-100 group-hover:opacity-100 data-[state=open]:opacity-100"><MoreHorizontal size={16} /></button></MenuTrigger>

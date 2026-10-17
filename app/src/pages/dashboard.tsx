@@ -29,7 +29,7 @@ export default function Dashboard() {
     { label: '全部评论', value: s ? (c ? c.total : null) : undefined, to: '/comments', hint: offline },
     { label: '未读评论', value: s ? (c ? c.unread : null) : undefined, to: '/comments', hint: offline, alert: !!c?.unread },
     { label: '总阅读量', value: s?.views, hint: offline },
-    { label: '文章点赞', value: s?.likes, hint: s ? '暂未统计' : undefined },
+    { label: '文章点赞', value: s?.likes, hint: offline },
   ];
   const entries = project?.entries ?? [];
   const drafts = entries.filter((e) => e.draft || e.changed).length;
@@ -144,6 +144,7 @@ function useLive(endpoint: string) {
         try { d = JSON.parse(e.data); } catch { return; } // pong
         if (typeof d.online === 'number') patch({ online: d.online });
         if (typeof d.views === 'number') patch({ views: d.views });
+        if (typeof d.likes === 'number') patch({ likes: d.likes });
       };
       ws.onclose = () => { clearInterval(ping); if (!stop) timer = window.setTimeout(open, Math.min(60_000, 2000 * 2 ** retry++)); };
     };

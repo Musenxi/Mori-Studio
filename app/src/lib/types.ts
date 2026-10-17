@@ -71,5 +71,8 @@ export interface Stats {
   views: number | null; online: number | null; likes: number | null;
 }
 
+/** 每篇的阅读量、点赞数，键是 posts/<id>；没连评论服务时 entries 是 null */
+export interface Traffic { entries: Record<string, { views: number; likes: number | null }> | null }
+
 /** 内容 JSON（文章、游记、页面）：编辑器里当作松散的对象处理，校验交给服务端 */
 export type Doc = Record<string, any> & { title?: string; blocks?: any[] };
