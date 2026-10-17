@@ -147,7 +147,7 @@ export const api = {
   assets: () => req<{ assets: AssetInfo[]; similar: string[][]; host: { pending: number } | null }>('GET', '/api/assets'),
   imageHost: () => req<{ host: Partial<ImageHost> | null; ready: boolean; pending: number }>('GET', '/api/image-host'),
   saveImageHost: (host: ImageHost | null) => req<{ ok: true }>('PUT', '/api/image-host', host ?? { host: null }),
-  testImageHost: () => req<{ ok: true }>('POST', '/api/image-host/test'),
+  testImageHost: (host?: ImageHost) => req<{ ok: true }>('POST', '/api/image-host/test', host),
   syncImageHost: (onChunk: (t: string) => void) => stream('/api/image-host/sync', onChunk),
   moveAssets: (paths: string[], folder: string) => req<{ ok: true; moved: Record<string, string> }>('POST', '/api/assets/move', { paths, folder }),
   mergeAssets: (keep: string, drops: string[]) => req<{ ok: true }>('POST', '/api/assets/merge', { keep, drops }),

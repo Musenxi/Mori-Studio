@@ -68,6 +68,7 @@ export default function Settings() {
   const [host, setHost] = useState<ImageHost>(NO_HOST);
   useEffect(() => { if (hostQ.data) setHost(hostForm(hostQ.data.host)); }, [hostQ.data]);
   const [hostTesting, setHostTesting] = useState(false);
+  const [hostSaving, setHostSaving] = useState(false);
   useEffect(() => { setIcon(cfg?.icon ?? null); }, [cfg?.icon]);
   useEffect(() => { if (cfg) { setTitle(cfg.title); setDescription(cfg.description ?? ''); setAccent(cfg.accent); setAccentDark(cfg.accentDark ?? ''); setOverride(!!cfg.accentDark); } }, [cfg?.title, cfg?.description, cfg?.accent, cfg?.accentDark]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (cfg) setHead(cfg.head ?? ''); }, [cfg?.head]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -81,6 +82,7 @@ export default function Settings() {
   const accentDarkNow = override ? accentDark : '';
   const spamDirty = !!(spam && spamQ.data && SPAM.some(([k]) => spamLines(spam[k]).join('\n') !== spamQ.data.spam[k].join('\n')));
   const mailDirty = !!(mail && mailQ.data && JSON.stringify(mail) !== JSON.stringify(mailQ.data.mail));
+  const hostFilled = ['endpoint', 'bucket', 'accessKeyId', 'publicBase'].every((k) => host[k as keyof ImageHost]) && !!(host.secretAccessKey || hostQ.data?.host?.hasSecret);
   const hostDirty = !!hostQ.data && JSON.stringify(host) !== JSON.stringify(hostForm(hostQ.data.host));
   const dirty = icon !== cfg.icon || mailDirty || spamDirty || (title && title !== cfg.title) || description !== (cfg.description ?? '') || accent !== cfg.accent || accentDarkNow !== (cfg.accentDark ?? '') || Object.keys(edits).length > 0 || autoN !== autosaveSeconds() || head.trim() !== (cfg.head ?? '');
 
@@ -115,6 +117,16 @@ export default function Settings() {
       toast.success('已保存');
     } catch (e) { toast.error((e as Error).message); }
     setBusy(false);
+  };
+
+  const saveHost = async () => {
+    setHostSaving(true);
+    try {
+      await api.saveImageHost(host.provider === 'off' ? null : host);
+      await qc.invalidateQueries({ queryKey: ['image-host'] });
+      toast.success('已保存');
+    } catch (e) { toast.error((e as Error).message); }
+    setHostSaving(false);
   };
 
   const iconInput = useRef<HTMLInputElement>(null);
@@ -237,13 +249,17 @@ export default function Settings() {
         <Section title="图床"><Card>
           <HostFields host={host} set={setHost} />
           {host.provider !== 'off' && (
-            <div className="pt-3">
-              <Button variant="secondary" size="sm" disabled={hostTesting || hostDirty || !hostQ.data?.ready} onClick={async () => {
+            <div className="flex gap-2 pt-3">
+              <Button variant="secondary" size="sm" disabled={hostTesting || !hostFilled} onClick={async () => {
                 setHostTesting(true);
-                try { await api.testImageHost(); toast.success('连接正常'); } catch (e) { toast.error((e as Error).message); }
+                try { await api.testImageHost(host); toast.success('连接正常'); } catch (e) { toast.error((e as Error).message); }
                 setHostTesting(false);
               }}>测试连接</Button>
+              <Button size="sm" disabled={hostSaving || !hostDirty} onClick={() => void saveHost()}>保存</Button>
             </div>
+          )}
+          {host.provider === 'off' && hostDirty && (
+            <div className="pt-3"><Button size="sm" disabled={hostSaving} onClick={() => void saveHost()}>保存</Button></div>
           )}
         </Card></Section>
 

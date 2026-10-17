@@ -692,7 +692,14 @@ export async function startStudio({ root, port = 4400, dev = false }) {
         } catch (e) { return send(res, 400, { error: e.message }); }
       }
       if (req.method === 'POST' && p === '/api/image-host/test') {
-        try { await testHost(imageHost()); return send(res, 200, { ok: true }); } catch (e) { return send(res, 400, { error: e.message }); }
+        try {
+          // 带了表单就测表单里的（还没保存的也能测）；Secret Key 留空用已保存的
+          const b = await readJson(req), saved = imageHost();
+          const form = Object.fromEntries(HOST_KEYS.map((k) => [k, typeof b[k] === 'string' ? b[k].trim() : b[k]]).filter(([, v]) => v !== undefined && v !== ''));
+          const host = Object.keys(form).length ? { ...form, ...(form.secretAccessKey ? {} : saved?.secretAccessKey ? { secretAccessKey: saved.secretAccessKey } : {}), pathStyle: !!b.pathStyle } : saved;
+          await testHost(host);
+          return send(res, 200, { ok: true });
+        } catch (e) { return send(res, 400, { error: e.message }); }
       }
       if (req.method === 'POST' && p === '/api/image-host/sync') {
         res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' });
