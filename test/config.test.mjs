@@ -217,7 +217,7 @@ test('建站年份：写成数字；改、删都只动这一行；范围不对�
   assert.doesNotMatch(readFileSync(f, 'utf8'), /since/);
 });
 
-test('comments.pageSize：数字不带引号，可留空删掉，只接受 1–100 的整数', () => {
+test('comments.pageSize：数字不带引号，可留空删掉，只接受 1–50 的整数', () => {
   const f = join(tmpdir(), `mori-ps-${process.pid}.ts`);
   writeFileSync(f, "export default {\n  comments: { provider: 'mori', endpoint: 'https://c.example.com' },\n};\n");
   setConfigValue(f, 'comments.pageSize', '10');
@@ -227,6 +227,6 @@ test('comments.pageSize：数字不带引号，可留空删掉，只接受 1–1
   setConfigValue(f, 'comments.pageSize', '');
   assert.doesNotMatch(readFileSync(f, 'utf8'), /pageSize/);
   assert.match(readFileSync(f, 'utf8'), /provider: 'mori'/);
-  assert.throws(() => setConfigValue(f, 'comments.pageSize', '101'), /1–100/);
-  assert.throws(() => setConfigValue(f, 'comments.pageSize', 'x'), /1–100/);
+  assert.throws(() => setConfigValue(f, 'comments.pageSize', '51'), /1–50/);
+  assert.throws(() => setConfigValue(f, 'comments.pageSize', 'x'), /1–50/);
 });

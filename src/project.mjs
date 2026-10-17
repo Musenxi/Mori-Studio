@@ -151,7 +151,7 @@ const BLOCK_KEYS = { 'home.style': ['quote', 'cover', 'list'], 'home.direction':
 /** 块里的自由文字：空字符串就删掉这一行 */
 const STR_BLOCK_KEYS = new Set(['author.name', 'author.email', 'author.url', 'comments.turnstileSiteKey']);
 /** 数字取值的设置：[最小, 最大]，写进文件时不带引号 */
-const NUM_KEYS = { 'home.count': [1, 8], 'comments.pageSize': [1, 100] };
+const NUM_KEYS = { 'home.count': [1, 8], 'comments.pageSize': [1, 50] };
 /** 数字设置里允许留空（删掉这一行）的 */
 const NUM_OPTIONAL = new Set(['comments.pageSize']);
 /** 最外层的数字设置：允许的范围 */
