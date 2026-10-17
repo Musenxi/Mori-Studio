@@ -14,7 +14,9 @@ const commit = (dir, file, text, msg) => { writeFileSync(join(dir, file), text);
 function setup() {
   const tpl = mkdtempSync(join(tmpdir(), 'mori-tpl-'));
   git(tpl, 'init', '-q', '-b', 'main');
-  commit(tpl, 'theme.txt', 'v1\n', '第一版');
+  const pkg = (v) => JSON.stringify({ version: v }) + '\n';
+  commit(tpl, 'package.json', pkg('1.0.0'), '第一版');
+  commit(tpl, 'theme.txt', 'v1\n', '第一版文件');
   const site = mkdtempSync(join(tmpdir(), 'mori-site-'));
   git(site, 'init', '-q', '-b', 'main');
   git(site, 'remote', 'add', 'template', tpl);
@@ -29,19 +31,18 @@ test('比较版本号', () => {
   assert.equal(compareVersions('0.0.1', '0.1.0'), -1);
 });
 
-test('主题：没有更新是 0；模板有新提交就列出来，更新后合进站点', async () => {
+test('主题：按版本号检查；模板版本更高才算有更新，更新后合进站点', async () => {
   const { tpl, site } = setup();
-  assert.deepEqual(await checkTheme(site), { behind: 0, commits: [] });
-  commit(tpl, 'theme.txt', 'v2\n', '改了页头');
-  commit(tpl, 'extra.txt', 'x\n', '加了一个文件');
+  assert.deepEqual(await checkTheme(site), { version: '1.0.0', latest: '1.0.0', outdated: false, commits: [] });
+  commit(tpl, 'theme.txt', 'v2\n', '改了页头'); // 提交变了但版本号没变：不算更新
+  assert.equal((await checkTheme(site)).outdated, false);
+  commit(tpl, 'package.json', JSON.stringify({ version: '1.1.0' }) + '\n', '发 1.1.0');
   const c = await checkTheme(site);
-  assert.equal(c.behind, 2);
-  assert.deepEqual(c.commits.map((x) => x.subject), ['加了一个文件', '改了页头']);
-  const r = await updateTheme(site);
-  assert.equal(r.changed, 2);
-  assert.equal(r.installed, false);
-  assert.equal(readFileSync(join(site, 'theme.txt'), 'utf8'), 'v2\n');
-  assert.equal((await checkTheme(site)).behind, 0);
+  assert.equal(c.outdated, true);
+  assert.equal(c.latest, '1.1.0');
+  assert.deepEqual(c.commits.map((x) => x.subject), ['发 1.1.0', '改了页头']);
+  git(site, 'merge', '-q', 'template/main', '--no-edit'); // 合并之后版本号一致（updateTheme 在版本变了时会装依赖，这里不跑）
+  assert.equal((await checkTheme(site)).outdated, false);
 });
 
 test('主题：站点自己改过别的文件不冲突；改了同一处就放弃合并，仓库保持原样', async () => {
