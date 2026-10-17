@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Ban, Check, EyeOff, RefreshCw, Reply, Trash2 } from 'lucide-react';
 import { Link } from 'react-router';
@@ -14,6 +14,7 @@ import { Body, Card, Empty, PageHeader, Section } from '@/components/page';
 import { CommentsConnect, THIRD_PARTY } from '@/components/comments-connect';
 import { Segmented } from '@/components/segmented';
 import { CommentBody } from '@/components/comment-body';
+import { EmojiPicker } from '@/components/emoji-picker';
 
 const TABS = [['all', '全部'], ['pending', '待审'], ['approved', '已通过'], ['hidden', '已隐藏'], ['spam', '垃圾箱']] as const;
 type Tab = (typeof TABS)[number][0];
@@ -115,6 +116,8 @@ function ReplyBox({ to, onDone, onCancel }: { to: CommentRow; onDone: () => Prom
   const { data: project } = useProject();
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
+  const [preview, setPreview] = useState(false);
+  const area = useRef<HTMLTextAreaElement>(null);
   const author = project?.config.author.name;
   const [kind, id] = to.entry.split('/');
   const title = (kind === 'pages' ? project?.pages : project?.entries)?.find((e) => e.id === id)?.title;
@@ -126,8 +129,16 @@ function ReplyBox({ to, onDone, onCancel }: { to: CommentRow; onDone: () => Prom
   };
   return (
     <form className="mt-3" onSubmit={(e) => { e.preventDefault(); if (text.trim()) void send(); }}>
-      <Textarea autoFocus rows={3} value={text} onChange={(e) => setText(e.target.value)} placeholder={`以 ${author} 回复 ${to.name}`} />
-      <div className="mt-2 flex justify-end gap-2">
+      {preview
+        ? <div className="min-h-18 rounded-lg border border-border px-3 py-2 text-13-5">{text.trim() ? <CommentBody text={(to.parentId ? `@${to.name} ` : '') + text.trim()} /> : <span className="text-muted-foreground">没有内容</span>}</div>
+        : <Textarea ref={area} autoFocus rows={3} value={text} onChange={(e) => setText(e.target.value)} placeholder={`以 ${author} 回复 ${to.name}`} />}
+      <div className="mt-2 flex items-center justify-end gap-2">
+        {!preview && <EmojiPicker btnClass="grid h-8 w-8 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground" onClose={() => area.current?.focus()} onPick={(key) => {
+          const a = area.current, at = a ? [a.selectionStart, a.selectionEnd] : [text.length, text.length], ins = `:[${key}]`;
+          setText(text.slice(0, at[0]) + ins + text.slice(at[1]));
+          requestAnimationFrame(() => { a?.focus(); a?.setSelectionRange(at[0] + ins.length, at[0] + ins.length); });
+        }} />}
+        <Button type="button" variant="ghost" size="sm" className="mr-auto" onClick={() => setPreview(!preview)}>{preview ? '编辑' : '预览'}</Button>
         <Button type="button" variant="ghost" size="sm" onClick={onCancel}>取消</Button>
         <Button type="submit" size="sm" disabled={busy || !text.trim()}>发表</Button>
       </div>
