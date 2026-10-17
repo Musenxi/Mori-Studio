@@ -1,18 +1,52 @@
+<div align="center">
+
+<img src="desktop/src-tauri/app-icon.png" width="128" alt="Mori Studio">
+
 # Mori Studio
 
-[Mori](https://github.com/Musenxi/Astro-Theme-Mori) 博客的本地写作与排版编辑器。读写项目里的内容文件，不需要 git。
+[Mori](https://github.com/Musenxi/Astro-Theme-Mori) 博客的本地写作与排版编辑器
+
+[![版本](https://img.shields.io/badge/version-0.2.0-002fa7?style=flat-square)](https://github.com/Musenxi/Mori-Studio/releases)
+[![许可](https://img.shields.io/badge/license-MIT-555?style=flat-square)](LICENSE)
+[![Node](https://img.shields.io/badge/Node.js-%E2%89%A522.12-5FA04E?style=flat-square&logo=nodedotjs&logoColor=white)](https://nodejs.org)
+[![React](https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react&logoColor=black)](https://react.dev)
+[![Vite](https://img.shields.io/badge/Vite-8-646CFF?style=flat-square&logo=vite&logoColor=white)](https://vite.dev)
+[![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-4-06B6D4?style=flat-square&logo=tailwindcss&logoColor=white)](https://tailwindcss.com)
+[![shadcn/ui](https://img.shields.io/badge/shadcn%2Fui-000?style=flat-square&logo=shadcnui&logoColor=white)](https://ui.shadcn.com)
+[![Tauri](https://img.shields.io/badge/Tauri-2-24C8D8?style=flat-square&logo=tauri&logoColor=white)](https://tauri.app)
+[![MCP](https://img.shields.io/badge/MCP-server-000?style=flat-square&logo=modelcontextprotocol&logoColor=white)](https://modelcontextprotocol.io)
+
+</div>
+
+直接读写博客项目里的内容文件，不需要 git。预览、校验、Markdown 转换都用项目自己的主题代码。有命令行版和桌面版（macOS / Windows），也能作为 MCP 服务让 AI 客户端读写博客。
+
+## 功能
+
+- **写作**：Markdown 写正文（第一行 `# 标题`，拖入图片、旁注），自动保存；也可以切到 JSON 源码。分类、标签、摘要、封面、置顶在右侧“信息”面板。保存时按主题的 schema 校验，问题会列出来但不阻止保存。
+- **读法与地图**：每篇都能开竖向 / 横向 / 混合读法，选默认读法和横滚方向；打开“地图”后封面有路线图，读到哪里地图跟到哪里，文末有行程表。
+- **地点**：选中一个词标成地点，填坐标（也认 Plus Code 和地图网址）、英文名、日期；路线可以导入 GPX，或按照片的拍摄地点生成。
+- **排版**：按横向读法把整篇排成一条，直接拖动调整位置、顺序、大小；单图 / 双图 / 图组 / 网格 / 自由排布切换，文字横排或竖排，在排版里直接改字。
+- **图片**：按文章分文件夹，导入时查重，HEIC 和实况照片自动转换；可以压缩后上传到 S3 兼容的图床（Cloudflare R2、阿里云 OSS、腾讯云 COS、七牛云、AWS S3）。
+- **页面**：独立页（“关于”“留言”）、页头入口、友人帐（粘贴网址自动带出站名、简介、头像）。
+- **评论**：接入自建评论服务 [Mori-Comment](https://github.com/Musenxi/Mori-Comment)，在 Studio 里审核、回复、管理垃圾评论、设置邮件提醒；保存文章时，如果改动会让已有的引用评论找不到原文，会先提醒。
+- **数据**：仪表盘显示字数、评论、阅读量、点赞和实时在线人数；文章列表有每篇的阅读量和点赞数。
+- **预览与发布**：预览用项目自己的 Astro 渲染真实页面；“构建并发布”到 VPS（rsync）或 Cloudflare Pages，发布目标写在项目的 `mori.config.ts` 里。
+- **设定**：刊名、站点图标、首页版式与排法、主题色、剧透样式、订阅内容、评论头像、图床、自定义 `<head>` 代码。
+- 删除的文章和页面移进 `.mori-trash/`，在回收站里可以还原。
+
+## 命令行版
+
+需要 Node.js 22.12 或更新；博客项目要先 `pnpm install`。
 
 ```bash
 pnpm install
-node bin/mori-studio.mjs --root 博客项目目录
+node bin/mori-studio.mjs --root 博客项目目录      # 打开 http://127.0.0.1:4400
 ```
 
-打开输出的地址（默认 http://127.0.0.1:4400）。博客项目要先 `pnpm install`：Studio 用项目自己的 Astro 预览和构建，文章结构、Markdown 转换、校验也用项目里的主题代码（`package.json` 的 `exports`）。
-
-```bash
---port 4400   # 端口
---dev         # 开发模式：构建后自动重启预览，发布目标里多一个“本地文件夹”
-```
+| 参数 | |
+| --- | --- |
+| `--port 4400` | 端口 |
+| `--dev` | 开发模式：构建后自动重启预览，发布目标多一个“本地文件夹” |
 
 还没有博客项目：
 
@@ -21,89 +55,61 @@ node bin/mori-studio.mjs create 新文件夹 [--repo 主题仓库] [--branch mai
 node bin/mori-studio.mjs install --root 博客项目目录 [--registry …]   # 只装依赖
 ```
 
-`create` 从主题模板仓库下载（有 git 就克隆，远端叫 `template`，以后 `pnpm theme:update` 从它拉主题更新；没有 git 就下 GitHub 的压缩包），再装依赖（有 pnpm 用 pnpm，没有用 npm）。代理照常用 `https_proxy` 环境变量。第一次用 Studio 打开新建的站点时，会先走一遍引导：刊名、作者，接入评论服务。
+`create` 从主题模板仓库下载（有 git 就克隆，远端叫 `template`，以后用 `pnpm theme:update` 拉主题更新；没有 git 就下载压缩包），再装依赖。代理用 `https_proxy` 环境变量。第一次打开新站点会先走一遍引导：刊名、作者、评论服务。
 
-改界面：`MORI_ROOT=博客项目目录 pnpm dev:ui`（热更新，接口转发给本机的 Studio）。测试：`MORI_THEME=主题仓库目录 pnpm test`。
+## 桌面版
+
+在 [Releases](https://github.com/Musenxi/Mori-Studio/releases) 下载，同样要先装 Node.js 22.12 或更新。有新版本时，打开应用会提示更新。
+
+- **macOS**：下载 `.dmg`（Apple 芯片选 `aarch64`，Intel 选 `x64`），拖进“应用程序”。应用没有 Apple 签名，第一次打开前在终端运行一次：
+
+  ```bash
+  xattr -cr "/Applications/Mori Studio.app"
+  ```
+
+- **Windows**：下载 `-setup.exe` 安装。安装包没有签名，提示“Windows 已保护你的电脑”时点“更多信息 → 仍要运行”。导入 HEIC 和实况照片要先装 ffmpeg。
+
+启动页可以新建站点（下载主题、装依赖）或打开已有的文件夹；菜单“项目 → 打开项目…”（⌘O）回到启动页。评论管理令牌、图床密钥存在系统钥匙串里（Windows 上存在项目的 `.mori-studio.json`，不进 git）。
 
 ## MCP
 
-让 Claude 桌面版、Claude Code 这类 AI 客户端读写博客、管评论：读和改文章（正文用 Markdown，和编辑器一样，没改的段落原样保留）、新建、发布、往文章里加图、预览、构建和发布站点、看和回复评论、审核。
+让 Claude 这类 AI 客户端读写博客、管评论：读和改文章（正文用 Markdown，没改的段落原样保留）、新建、发布、加图、预览、构建发布站点、看和回复评论、审核。
 
 ```bash
 node bin/mori-studio.mjs mcp --root 博客项目目录
 ```
 
-这是 stdio 的 MCP 服务：这个项目已经有 Studio 在跑（命令行版或桌面版）就连过去，没有就自己起一个不带界面的。配置可以在 Studio 的“设定 → MCP”里直接复制。Studio 服务本身也在 `/mcp` 上提供 Streamable HTTP。
+这是 stdio 的 MCP 服务：项目已经有 Studio 在跑（命令行版或桌面版）就连过去，没有就自己起一个不带界面的。配置可以在“设定 → MCP”里复制。Studio 本身也在 `/mcp` 上提供 Streamable HTTP。删除、撤回、发布到线上、删除评论标了 destructive，客户端会先问你。
 
-删除、撤回、发布到线上、删除评论这几个工具标了 destructive，客户端会先问你。
-
-同一套工具也能在命令行里调用（给 Claude Code 这类能跑命令的客户端、脚本用；找 Studio 的方式和上面一样）：
+同一套工具也能在命令行里调用：
 
 ```bash
-node bin/mori-studio.mjs tool --root 博客项目目录                      # 列出工具
-node bin/mori-studio.mjs tool update_entry --help                     # 参数
-node bin/mori-studio.mjs tool read_entry --kind post --id hello       # 调用
+node bin/mori-studio.mjs tool --root 博客项目目录                  # 列出工具
+node bin/mori-studio.mjs tool update_entry --help                 # 参数
 cat 正文.md | node bin/mori-studio.mjs tool update_entry --kind post --id hello --markdown -
 ```
 
-不是字符串的参数按 JSON 写（`--meta '{"tags":["旅行"]}'`），值写 `-` 从标准输入读、`@路径` 读文件。破坏性的工具要加 `--yes` 才执行。出错退出码 1，参数不对 2，没加 `--yes` 3。
+不是字符串的参数按 JSON 写（`--meta '{"tags":["旅行"]}'`），值写 `-` 从标准输入读、`@路径` 读文件。破坏性的工具要加 `--yes`。退出码：出错 1，参数不对 2，没加 `--yes` 3。
 
-## 桌面版
-
-### 安装
-
-在 [Releases](https://github.com/Musenxi/Mori-Studio/releases) 下载。macOS 下载 `.dmg`（Apple 芯片选 `aarch64`，Intel 选 `x64`），把 Mori Studio 拖进“应用程序”。要先装 Node.js 22.12 或更新。
-
-应用没有 Apple 签名，第一次打开前在终端运行一次（不然会提示“已损坏”或“无法验证开发者”）：
+## 开发
 
 ```bash
-xattr -cr "/Applications/Mori Studio.app"
+MORI_ROOT=博客项目目录 pnpm dev:ui     # 界面热更新，接口转发给本机的 Studio
+MORI_THEME=主题仓库目录 pnpm test       # 测试
+pnpm lint                              # Tailwind 类名检查
+pnpm desktop                           # 编译并打开桌面版窗口（要先装 Rust）
+pnpm desktop:build                     # 本机打包
 ```
 
-Windows 下载 `-setup.exe` 安装。安装包同样没有签名，如果提示“Windows 已保护你的电脑”，点“更多信息 → 仍要运行”。Windows 上管理令牌、图床密钥还存在项目的 `.mori-studio.json` 里（不进 git），导入 HEIC 和实况照片要先装 ffmpeg 或者先转成 JPEG。
+| 目录 | |
+| --- | --- |
+| `bin/` | 命令行入口 |
+| `src/` | Studio 服务：内容读写、预览、构建发布、评论代理、MCP |
+| `app/` | 界面：React + Vite + Tailwind CSS + shadcn/ui |
+| `desktop/` | 桌面版：Tauri 壳、启动页、打包脚本 |
 
-之后有新版本时，打开应用会提示更新。
+桌面版用本机的 Node（从登录 shell 里找，`MORI_NODE` 可以指定）；打包时把 Studio 的代码和运行依赖放进应用。
 
-### 开发
+## 许可
 
-```bash
-pnpm desktop          # 编译并打开窗口
-pnpm desktop:build    # 本机打包（.app、.dmg）
-```
-
-要先装 Rust（`brew install rustup && rustup default stable`）。桌面版是 Tauri 写的壳：启动页新建站点（下载主题、装依赖，走的是上面的 `create`；位置、主题仓库、分支、依赖源、代理记在应用设置里）或打开文件夹（还没装依赖的先装，空文件夹就在里面新建），给项目起一个 Studio 服务（随机端口），窗口直接打开它；网页里新窗口打开的链接交给系统浏览器；菜单“项目 → 打开项目…”（⌘O）回到启动页。`mori-studio-desktop 项目目录` 直接打开。
-
-- 用本机的 Node（从登录 shell 里找，nvm、Homebrew 装的都行）；`MORI_NODE` 可以指定。
-- 打包时 `desktop/scripts/stage-studio.mjs` 把 Studio 的代码和运行依赖放进应用（`Contents/Resources/studio`）；开发时直接用仓库里的。
-- 界面按项目构建在应用缓存里（`~/Library/Caches/app.mori.studio/ui/`），不动仓库里的 `dist/`。
-- 评论管理令牌、图床的 Secret Key 存在系统钥匙串（“Mori Studio”），按评论服务地址 / 存储桶存，几个项目共用；命令行版也一样。以前存在 `.mori-studio.json` 里的，打开项目时自动搬进去。
-
-### 发布
-
-GitHub Actions（`.github/workflows/release.yml`）在推 `v*` 标签时分别打 Apple 芯片、Intel 和 Windows 三个包，连同更新包传到 Release 草稿。在 Actions 里手动运行它只打包、不建 Release，安装包在那次运行的 Artifacts 里。
-
-1. 改 `package.json` 的 `version`（桌面版的版本号就用它），提交。
-2. `git tag v0.1.0 && git push origin main --tags`
-3. Actions 跑完后到 Releases 检查草稿，发布。发布以后，已经装了的应用才会收到更新。
-
-更新包要用私钥签名，公钥在 `desktop/src-tauri/tauri.conf.json`。私钥在本机 `~/.tauri/mori-studio.key`，第一次发布前放进仓库的 Secrets：
-
-```bash
-gh secret set TAURI_SIGNING_PRIVATE_KEY < ~/.tauri/mori-studio.key
-```
-
-私钥要备份：丢了的话，已装的应用就收不到之后的更新，只能重新下载安装。
-
-## 功能
-
-- 读写项目里的内容 JSON，自动保存；保存时用主题同一份 schema 校验，问题会列出来（不阻止保存）。删除是移进 `.mori-trash/`。
-- 文章：默认用 Markdown 写（一个大文本框，标题是第一行 `# 标题`，拖入图片、旁注），分类、标签、摘要、封面、首页置顶在右侧“信息”面板；也可以切到 JSON 源码。
-- 读法和地图：每篇都能开。“信息”里的“读法”勾选允许读者选哪几种（竖向 / 横向 / 混合）、默认哪种、横滚方向；“地图”是一个开关，开了以后封面有路线图、左下角显示读到哪里、文末有行程表。
-- 地点：在 Markdown 里选中一个词，点工具栏的“地点”，填坐标（“纬度, 经度”，也认 Google 地图的 Plus Code / Open Location Code 和地图网址；短码用上一个地点补全；地名可以留空，只让读到这里时地图跟着变）、英文名、日期，文字就变成 `[地名](geo:纬度,经度)`，是地图上的一个点；不绑定标题，想标在哪就标在哪。坐标、英文名、日期之后在“信息”里改；路线（GPX 轨迹、按照片拍摄地点建议）也在“信息”里。
-- 排版：“排版”视图按横向读法把整篇排成一条（相邻的文字是一列，二级标题另起一列），直接拖：上下拖调位置，左右拖换顺序，右下角圆点改大小，选中后在上方切换单图 / 双图 / 图组 / 网格 / 自由排布、合并或拆开、插地图、文字横排或竖排；自由排布和图组里的图也能直接拖。
-- 页面：“关于”“留言”这样的独立页（网址 `/页面名/`）；“页头入口”决定网站顶部玻璃胶囊里放哪些入口；“友人帐”粘贴网址自动带出站名、简介和头像。
-- 文件：所有图片，谁在引用、没被引用的，上传和删除。
-- 仪表盘、分类 / 标签、草稿箱、评论管理、设定（刊名、首页版式与排法、订阅内容、主题色）。
-- 评论服务（[Mori-Comment](https://github.com/Musenxi/Mori-Comment)）在“评论”页或“设定 → 评论”接入：填服务地址和管理令牌，连得通才写进 `mori.config.ts`（原来用的是 Giscus 这类第三方评论会先问你再替换）；评论服务开了人机验证时，那里也填 Turnstile 站点密钥。
-- “预览”用项目自己的 Astro 渲染真实页面：打开预览时在 Studio 进程里起渲染器（不另开进程、不占 4321），请求哪页渲染哪页，十分钟不用就停掉；项目已经在跑 `astro dev` 就直接用它。
-- 构建与发布：在项目的 `mori.config.ts` 里加发布目标（`publish`，写法见主题的 README），然后点“构建并发布”。
+MIT
