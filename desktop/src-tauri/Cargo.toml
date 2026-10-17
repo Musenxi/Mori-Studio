@@ -1,6 +1,6 @@
 [package]
 name = "mori-studio-desktop"
-version = "0.0.1"
+version = "0.2.0"
 description = "Mori Studio 桌面版"
 license = "MIT"
 edition = "2021"
