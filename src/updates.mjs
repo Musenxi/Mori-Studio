@@ -37,14 +37,16 @@ async function ensureRemote(root) {
   try { await git(root, ['remote', 'get-url', 'template']); } catch { await git(root, ['remote', 'add', 'template', templateUrl(root)]); }
 }
 
-/** 主题有没有更新：落后 template/main 几个提交，最近的几条是什么 */
+/** 主题有没有更新：比站点和 template/main 上 package.json 的版本号；有新版时附上最近几条提交 */
 export async function checkTheme(root) {
   await ensureRepo(root);
   await ensureRemote(root);
   await git(root, ['fetch', 'template'], { timeout: 90_000 });
-  const behind = Number(await git(root, ['rev-list', '--count', 'HEAD..template/main']));
-  const log = behind ? await git(root, ['log', '-n', '8', '--format=%h%x09%s', 'HEAD..template/main']) : '';
-  return { behind, commits: log ? log.split('\n').map((l) => { const [hash, ...s] = l.split('\t'); return { hash, subject: s.join('\t') }; }) : [] };
+  const version = String(JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')).version ?? '0.0.0');
+  const latest = String(JSON.parse(await git(root, ['show', 'template/main:package.json'])).version ?? version);
+  const outdated = compareVersions(latest, version) > 0;
+  const log = outdated ? await git(root, ['log', '-n', '8', '--format=%h%x09%s', 'HEAD..template/main']).catch(() => '') : '';
+  return { version, latest, outdated, commits: log ? log.split('\n').map((l) => { const [hash, ...s] = l.split('\t'); return { hash, subject: s.join('\t') }; }) : [] };
 }
 
 /**

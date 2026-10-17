@@ -72,10 +72,11 @@ export function Updates() {
       )}
       <Field label="主题">
         <div className="flex min-h-9 items-center gap-3">
-          <span className="min-w-0">
-            {!theme ? <span className="text-muted-foreground">{done || '—'}</span> : 'error' in theme ? <span className="text-destructive">{theme.error}</span> : theme.behind === 0 ? '已是最新' : `有 ${theme.behind} 项更新`}
+          {theme && !('error' in theme) && <span className="mono">v{theme.version}</span>}
+          <span className="min-w-0 text-muted-foreground">
+            {!theme ? (done || '—') : 'error' in theme ? <span className="text-destructive">{theme.error}</span> : theme.outdated ? `有新版 v${theme.latest}` : '已是最新'}
           </span>
-          {theme && !('error' in theme) && theme.behind > 0 && <Button size="sm" variant="default" className="ml-auto shrink-0" disabled={!!busy} onClick={() => void updateTheme()}>{busy === 'theme' ? '更新中…' : '更新'}</Button>}
+          {theme && !('error' in theme) && theme.outdated && <Button size="sm" variant="default" className="ml-auto shrink-0" disabled={!!busy} onClick={() => void updateTheme()}>{busy === 'theme' ? '更新中…' : '更新'}</Button>}
         </div>
         {theme && !('error' in theme) && theme.commits.length > 0 && (
           <ul className="mt-1 space-y-0.5 text-13 text-muted-foreground">

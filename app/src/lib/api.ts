@@ -46,7 +46,7 @@ export interface SpamRules { words: string[]; ips: string[]; urls: string[]; nam
 /** 评论服务的 /admin/info */
 export interface UpdateCheck {
   studio: { version: string; latest: string; outdated: boolean; desktop: boolean; canUpdate: boolean } | { error: string } | null;
-  theme: { behind: number; commits: Array<{ hash: string; subject: string }> } | { error: string } | null;
+  theme: { version: string; latest: string; outdated: boolean; commits: Array<{ hash: string; subject: string }> } | { error: string } | null;
   comments: { version: string | null; latest: string | null; runtime: string | null; outdated: boolean; error?: string } | null;
 }
 export interface CommentsInfo { service: string; version: string | null; api: number; runtime: string | null; features: { turnstile?: boolean; mail?: string[]; online?: boolean } }
