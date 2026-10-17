@@ -32,15 +32,6 @@ test('新建文章：出现在项目信息里；重复地址名 409', async () =
   assert.equal(p.dev, false);
 });
 
-test('游记并进文章：旧的 travel 接口新建出来的也是普通结构，和文章同在 posts 目录', async () => {
-  assert.equal((await call('POST', '/api/entry/travel', { id: 'trip', title: '一次旅行', category: 'b' })).status, 200);
-  const d = JSON.parse(readFileSync(join(root, 'src/content/posts/trip.json'), 'utf8'));
-  assert.equal(d.stops, undefined);
-  assert.equal(d.blocks[0].type, 'p');
-  const p = (await call('GET', '/api/project')).body;
-  assert.equal(p.entries.find((e) => e.id === 'trip').kind, 'post');
-});
-
 test('保存：校验不过也写盘，并返回问题；改好后问题消失', async () => {
   const doc = (await call('GET', '/api/entry/post/hello')).body;
   const bad = await call('PUT', '/api/entry/post/hello', { ...doc, blocks: [{ id: 'b01', type: 'p' }] });
@@ -94,6 +85,7 @@ test('统计与文件', async () => {
 });
 
 test('删除文章：移进回收站', async () => {
+  assert.equal((await call('POST', '/api/entry/post', { id: 'trip', title: '一次旅行', category: 'b' })).status, 200);
   assert.equal((await call('DELETE', '/api/entry/post/trip')).status, 200);
   assert.ok(!existsSync(join(root, 'src/content/posts/trip.json')));
   assert.ok(readdirSync(join(root, '.mori-trash')).some((f) => f.endsWith('post-trip.json')));

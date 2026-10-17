@@ -5,7 +5,7 @@
  * 改动不大的块沿用 id（划词引用评论靠 id 定位）。
  */
 import { parseBlocks, blocksToMarkdown, mdItems } from 'astro-mori/markdown';
-import { normalizeDoc, WRITING_BLOCKS } from 'astro-mori/flow';
+import { WRITING_BLOCKS } from 'astro-mori/flow';
 
 const ASSET = '../../assets/';
 /**
@@ -34,8 +34,7 @@ function mapBlockImages(b, fn) {
 }
 
 export const toMarkdown = (doc, folder = '') => {
-  const d = normalizeDoc(doc);
-  return `# ${d.title ?? ''}\n\n${blocksToMarkdown({ blocks: (d.blocks ?? []).map((b) => mapBlockImages(b, stripAsset(folder))), notes: d.notes })}`;
+  return `# ${doc.title ?? ''}\n\n${blocksToMarkdown({ blocks: (doc.blocks ?? []).map((b) => mapBlockImages(b, stripAsset(folder))), notes: doc.notes })}`;
 };
 
 /** 字符二元组的 Dice 系数：两段文字有多像（0–1），中文按字二元组也管用 */
@@ -128,8 +127,7 @@ function carry(old, nb) {
 
 /** 文本 → 新文档（标题、块、注释）。其余元信息不动。文本里没有一级标题就保留原标题 */
 export function fromMarkdown(text, doc, folder = '') {
-  const base = normalizeDoc(doc);
-  const oldBlocks = base.blocks ?? [];
+  const oldBlocks = doc.blocks ?? [];
   const parsed = parseBlocks(text);
   // 新插入的图片默认与正文同宽（已有的图片对上旧块，沿用旧块的版式）
   const newBlocks = restoreNoteKinds(parsed.blocks, oldBlocks).map((b) => mapBlockImages(b.type === 'image' && !b.layout ? { ...b, layout: 'inline' } : b, addAsset(folder)));
@@ -194,6 +192,6 @@ export function fromMarkdown(text, doc, folder = '') {
     }
   }).filter(Boolean);
 
-  const notes = alignNotes(base.notes, restoreNoteKinds(parsed.notes, oldBlocks));
-  return { ...base, title: parsed.title ?? base.title, blocks: blocks.length ? blocks : [{ id: 'b01', type: 'p', text: '' }], notes: Object.keys(notes).length ? notes : undefined };
+  const notes = alignNotes(doc.notes, restoreNoteKinds(parsed.notes, oldBlocks));
+  return { ...doc, title: parsed.title ?? doc.title, blocks: blocks.length ? blocks : [{ id: 'b01', type: 'p', text: '' }], notes: Object.keys(notes).length ? notes : undefined };
 }

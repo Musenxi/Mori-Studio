@@ -27,16 +27,12 @@ export function commentsClient({ endpoint, token }) {
     return q.size ? `?${q}` : '';
   };
 
-  // /admin/info 按“地址 + 令牌”缓存；旧版服务没有这个接口（404），当作 api 0
+  // /admin/info 按“地址 + 令牌”缓存
   let infoCache = { key: '', info: null };
   async function info({ fresh = false } = {}) {
     const key = `${endpoint()}\n${token()}`;
     if (!fresh && infoCache.key === key && infoCache.info) return infoCache.info;
-    let i;
-    try { i = await call('GET', '/info'); } catch (e) {
-      if (e.code !== 404) throw e;
-      i = { service: 'mori-comments', version: null, api: 0, runtime: null, features: {} };
-    }
+    const i = await call('GET', '/info');
     infoCache = { key, info: i };
     return i;
   }
@@ -46,12 +42,10 @@ export function commentsClient({ endpoint, token }) {
     if (i.api > API_VERSION) throw Object.assign(new Error(`评论服务的接口（${i.api}）比 Studio 新，请更新 Studio`), { code: 409 });
     return i;
   }
-  /** 接入前的检查：比 check 多确认这个地址上真有评论服务（旧版服务没有 /info，任何 404 的网站也会被当成旧版） */
+  /** 接入前的检查：错误换成给人看的说法（404 就是这个地址上没有评论服务） */
   async function verify() {
     try {
-      const i = await check();
-      if (!i.api) await call('GET', '/stats');
-      return i;
+      return await check();
     } catch (e) {
       if (e.code === 401) throw Object.assign(new Error('管理令牌不对'), { code: 400 });
       if (e.code === 404) throw Object.assign(new Error('这个地址上没有评论服务'), { code: 400 });
@@ -59,7 +53,7 @@ export function commentsClient({ endpoint, token }) {
     }
   }
 
-  /** 一页：{ comments, next }；旧版服务没有 next */
+  /** 一页：{ comments, next }；最后一页 next 是 null */
   const list = ({ status, entry, since, before, limit = 100 } = {}) =>
     call('GET', `/comments${query({ status, entry, since, before, limit })}`).then((j) => ({ comments: j.comments, next: j.next ?? null }));
   /** 翻完所有页（max 条封顶） */
@@ -76,9 +70,7 @@ export function commentsClient({ endpoint, token }) {
   /** 总数、待审、since 之后的新评论数 */
   async function numbers(since) {
     const st = await call('GET', `/stats${query({ since })}`);
-    // 旧版服务不认 ?since=，退回到拉列表自己数
-    const unread = st.since ?? (await list({ limit: 500 })).comments.filter((c) => c.createdAt > since && !c.author).length;
-    return { total: (st.pending ?? 0) + (st.approved ?? 0) + (st.hidden ?? 0), pending: st.pending ?? 0, unread };
+    return { total: (st.pending ?? 0) + (st.approved ?? 0) + (st.hidden ?? 0), pending: st.pending ?? 0, unread: st.since ?? 0 };
   }
 
   return {

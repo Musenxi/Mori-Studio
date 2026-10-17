@@ -220,23 +220,6 @@ test('长卷：地点链接里改了坐标，文字块沿用 id，标题上的�
   assert.deepEqual(back.blocks[0].text[0].marks[0].lnglat, [-21.8, 64.2]);
 });
 
-test('老游记：打开就是转换后的结构；站名成了带地点的二级标题，段落 id 沿用', () => {
-  const legacy = {
-    kind: 'travel', title: '环岛', date: '2025-01-01', category: 'journeys', excerpt: '', notes: {},
-    stops: [{ id: 'rey', name: '雷克雅未克', en: 'Reykjavík', lnglat: [-21.9426, 64.1466], date: '06.20' }],
-    blocks: [{ id: 't01', type: 'text', stop: 'rey', y: 0.3, paras: [{ id: 't01p1', text: [{ t: '落地是晚上。' }] }] }, { id: 's01', type: 'single', stop: 'rey', src: '../../assets/a.jpg', alt: '', layout: 'inset' }],
-  };
-  const md = toMarkdown(legacy);
-  assert.match(md, /^## \[雷克雅未克\]\(geo:64\.1466,-21\.9426\?en=Reykjavík&date=06\.20\)$/m);
-  const back = fromMarkdown(md.replace('落地是晚上。', '落地是深夜。'), legacy);
-  assert.equal(back.stops, undefined);
-  assert.equal(back.kind, undefined);
-  assert.equal(back.map, true);
-  assert.deepEqual(back.blocks.map((b) => b.id), ['h-rey', 't01p1', 's01']);
-  assert.equal(find(back, 't01p1').h.y, 0.3);
-  assert.equal(find(back, 's01').layout, 'inline');
-});
-
 /* ───────────── 长卷的文字也能有小标题、引用、列表、代码（和普通文章一样） ───────────── */
 
 const rich = () => ({

@@ -14,7 +14,7 @@ const pad = (n: number) => String(n).padStart(2, '0');
 const when = (t: number) => { const d = new Date(t); return `${d.getFullYear()}/${pad(d.getMonth() + 1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`; };
 const bytes = (n: number) => (n < 1024 * 1024 ? `${Math.max(1, Math.round(n / 1024))} KB` : `${(n / 1024 / 1024).toFixed(1)} MB`);
 /** 原来在哪：文章、页面给网址那一段，图片给图库里的路径 */
-const where = (it: TrashItem) => (it.kind === 'asset' ? it.label : it.kind === 'emoji' ? it.files[0][1] : `/${it.kind === 'page' ? '' : 'posts/'}${it.key.replace(/^(legacy:)?\d+-(post|travel|page)-/, '')}/`);
+const where = (it: TrashItem) => (it.kind === 'asset' ? it.label : it.kind === 'emoji' ? it.files[0][1] : `/${it.kind === 'page' ? '' : 'posts/'}${it.key.replace(/^\d+-(post|page)-/, '')}/`);
 
 export default function Trash() {
   const qc = useQueryClient();

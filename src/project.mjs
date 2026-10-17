@@ -8,8 +8,8 @@ import { recordTrash } from './trash.mjs';
 import { loadConfigFromFile } from 'vite';
 import { folderOf, retireFolder } from './library.mjs';
 
-/** 文章都在 src/content/posts/ 下（travel 是游记并进文章之前的叫法，接口还认） */
-export const KINDS = { post: 'posts', travel: 'posts', page: 'pages' };
+/** 文章都在 src/content/posts/ 下 */
+export const KINDS = { post: 'posts', page: 'pages' };
 export const kindOf = () => 'post';
 const ID = /^[a-z0-9][a-z0-9_-]*$/i;
 export { IMAGE_EXT } from './library.mjs';
@@ -463,7 +463,7 @@ export function listPages(root) {
 }
 
 /** 页面的网址就是文件名，这些名字站点自己用了 */
-export const RESERVED_SLUGS = ['posts', 'archive', 'category', 'search', 'travels', 'feed', 'rss', '404', 'sitemap', 'robots', 'favicon', '_astro', 'api', 'live', 'map'];
+export const RESERVED_SLUGS = ['posts', 'archive', 'category', 'search', 'feed', 'rss', '404', 'sitemap', 'robots', 'favicon', '_astro', 'api', 'live', 'map'];
 
 /* ───────────── 友人帐：src/content/friends.json ───────────── */
 

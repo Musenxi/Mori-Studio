@@ -14,7 +14,6 @@ import { avatarTemplate } from 'astro-mori/avatar';
 import { RESERVED_SLUGS, loadConfig, setConfigValue, setCommentsEndpoint, setThirdPartyComments, checkCommentsEndpoint, setHead, setCategories, setPublish, setNav, setActions, listPages, readFriends, writeFriends, readFriendsLost, writeFriendsLost, formatFriends, parseFriends, renameCategoryInEntries, renameTag, countPages, listEntries, readEntry, writeEntry, entryExists, skeleton, trashEntry, publishEntry, unpublishEntry, discardDraft, kindOf, isId, KINDS, IMAGE_EXT } from './project.mjs';
 import { validateEntry } from 'astro-mori/validate';
 import { locate } from 'astro-mori/anchor';
-import { normalizeDoc } from 'astro-mori/flow';
 import { probeSite } from './probe.mjs';
 import { gitInfo, gitInit, publishGit, publishLocal } from './publish.mjs';
 import { HEIC_EXT, heicToJpeg, uprightJpeg, stripLocation, toWebMp4 } from './media.mjs';
@@ -83,8 +82,7 @@ function serveFile(res, file) {
 export function blockTexts(kind, data) {
   const spanText = (v) => (typeof v === 'string' ? v : (v ?? []).map((s) => s.t).join('')).replace(/\n/g, '');
   const out = new Map();
-  // 老游记（stops + 文字块）读者看到的是转换后的块：段落 id 沿用，引用评论照样能找到
-  for (const b of normalizeDoc(data).blocks ?? []) if (['p', 'h', 'quote'].includes(b.type)) out.set(b.id, spanText(b.text));
+  for (const b of data.blocks ?? []) if (['p', 'h', 'quote'].includes(b.type)) out.set(b.id, spanText(b.text));
   return out;
 }
 
@@ -124,13 +122,12 @@ export async function startStudio({ root, port = 4400, dev = false }) {
 
   const isUp = async () => !!(await preview.url());
 
-  // 站点图标（mori.config.ts 的 icon）：预设的 SVG 在项目的主题里（astro-mori/site-icon），自己的图在 public/ 里。旧版主题没有这个模块，左上角就退回到刊名首字
-  const siteIcons = await import('astro-mori/site-icon').catch(() => null);
-  // 表情包（public/emoji/）：旧版主题没有这个模块，就当没有表情
-  const emojiMod = await import('astro-mori/emoji').catch(() => null);
+  // 站点图标（mori.config.ts 的 icon）：预设的 SVG 在项目的主题里（astro-mori/site-icon），自己的图在 public/ 里
+  const siteIcons = await import('astro-mori/site-icon');
+  // 表情包（public/emoji/）
+  const emojiMod = await import('astro-mori/emoji');
   const ICON_EXT = new Set(['.svg', '.png', '.ico', '.jpg', '.jpeg', '.webp']);
-  function siteIconFile(icon = config.icon || siteIcons?.DEFAULT_ICON) {
-    if (!siteIcons || !icon) return null;
+  function siteIconFile(icon = config.icon || siteIcons.DEFAULT_ICON) {
     if (siteIcons.isPresetIcon(icon)) return fileURLToPath(siteIcons.presetIconUrl(icon));
     const pub = join(root, 'public'), f = normalize(join(pub, String(icon)));
     return f.startsWith(pub + sep) && existsSync(f) ? f : null;
@@ -172,10 +169,8 @@ export async function startStudio({ root, port = 4400, dev = false }) {
   const commentsEndpoint = () => (config.comments?.provider === 'mori' ? String(config.comments.endpoint ?? '').replace(/\/$/, '') : '');
   function adminToken() {
     if (process.env.MORI_ADMIN_TOKEN) return process.env.MORI_ADMIN_TOKEN;
-    const ep = commentsEndpoint(), st = readState();
-    if (!keys || !ep) return st.adminToken ?? '';
-    // 以前存在 .mori-studio.json 里的令牌，搬进钥匙串
-    if (st.adminToken) { keys.set(commentsAccount(ep), st.adminToken); const { adminToken: _moved, ...rest } = st; replaceState(rest); }
+    const ep = commentsEndpoint();
+    if (!keys || !ep) return readState().adminToken ?? '';
     return keys.get(commentsAccount(ep));
   }
   const comments = commentsClient({ endpoint: commentsEndpoint, token: adminToken });
@@ -191,10 +186,8 @@ export async function startStudio({ root, port = 4400, dev = false }) {
   function imageHost() {
     const h = readState().imageHost;
     if (!h || !keys) return h ?? null;
-    const { secretAccessKey: old, ...rest } = h;
-    if (old) { keys.set(imageHostAccount(rest), old); writeState({ imageHost: rest }); } // 以前存在文件里的，搬进钥匙串
-    const secret = keys.get(imageHostAccount(rest));
-    return secret ? { ...rest, secretAccessKey: secret } : rest;
+    const secret = keys.get(imageHostAccount(h));
+    return secret ? { ...h, secretAccessKey: secret } : h;
   }
   function saveImageHost(next) {
     const prev = imageHost();
@@ -329,12 +322,12 @@ export async function startStudio({ root, port = 4400, dev = false }) {
         const cn = await commentNumbers(); // 侧栏上的未读数量；评论服务连不上就当 0
         const pending = cn?.unread ?? 0;
         return send(res, 200, {
-          root, configPath, config: { title: config.title ?? 'Mori', icon: config.icon || (siteIcons?.DEFAULT_ICON ?? null), iconStamp: (() => { const f = siteIconFile(); return f ? statSync(f).mtimeMs : 0; })(), iconPresets: siteIcons?.ICONS ?? [], description: config.description ?? '', accent: config.accent ?? '#002fa7', accentDark: config.accentDark, categories: config.categories ?? [], home: config.home, archive: config.archive, feed: config.feed, comments: config.comments?.provider === 'mori' ? { avatar: config.comments.avatar, status: config.comments.status ?? 'on', turnstileSiteKey: config.comments.turnstileSiteKey ?? '' } : undefined, nav: config.nav ?? null, actions: config.actions ?? null, actionsLayout: config.actionsLayout === 'split' ? 'split' : 'merged', spoiler: config.spoiler === 'blur' || config.spoiler === 'ink' ? config.spoiler : 'particles', lang: config.lang ?? 'zh-CN', head: typeof config.head === 'string' ? config.head : '', author: config.author ?? {}, site: typeof config.site === 'string' ? config.site : '' },
+          root, configPath, config: { title: config.title ?? 'Mori', icon: config.icon || siteIcons.DEFAULT_ICON, iconStamp: (() => { const f = siteIconFile(); return f ? statSync(f).mtimeMs : 0; })(), iconPresets: siteIcons.ICONS, description: config.description ?? '', accent: config.accent ?? '#002fa7', accentDark: config.accentDark, categories: config.categories ?? [], home: config.home, archive: config.archive, feed: config.feed, comments: config.comments?.provider === 'mori' ? { avatar: config.comments.avatar, status: config.comments.status ?? 'on', turnstileSiteKey: config.comments.turnstileSiteKey ?? '' } : undefined, nav: config.nav ?? null, actions: config.actions ?? null, actionsLayout: config.actionsLayout === 'split' ? 'split' : 'merged', spoiler: config.spoiler === 'blur' || config.spoiler === 'ink' ? config.spoiler : 'particles', lang: config.lang ?? 'zh-CN', head: typeof config.head === 'string' ? config.head : '', author: config.author ?? {}, site: typeof config.site === 'string' ? config.site : '' },
           entries: listEntries(root), pages: listPages(root), assets: listAssets(root), dev, preview: { url: await preview.url() }, mcp: { command: stableNode(), args: [join(here, '../bin/mori-studio.mjs'), 'mcp', '--root', root], url: `http://127.0.0.1:${server.address().port}/mcp` }, publish: config.publish ?? null, comments: { provider: config.comments?.provider ?? null, avatar: avatarTemplate(config.comments?.avatar), endpoint: commentsEndpoint(), hasToken: !!commentsEndpoint() && !!adminToken(), third: config.comments && config.comments.provider !== 'mori' ? config.comments : null, pending }, welcome: !!readState().welcome,
         });
       }
 
-      /* ── 仪表盘数字：本地能算的现算；阅读量、点赞、在线访客来自评论服务（连不上给 null；老版本的服务没有点赞，也是 null） ── */
+      /* ── 仪表盘数字：本地能算的现算；阅读量、点赞、在线访客来自评论服务（连不上给 null） ── */
       if (req.method === 'GET' && p === '/api/stats') {
         const entries = listEntries(root);
         const [cn, tr] = await Promise.all([commentNumbers(), commentsEndpoint() && adminToken() ? comments.traffic().catch(() => null) : null]);
@@ -344,10 +337,10 @@ export async function startStudio({ root, port = 4400, dev = false }) {
         });
       }
 
-      /* ── 每篇的阅读量、点赞数（文章列表用）：没连评论服务给 null；老版本的服务没有点赞，likes 是 null ── */
+      /* ── 每篇的阅读量、点赞数（文章列表用）：没连评论服务给 null ── */
       if (req.method === 'GET' && p === '/api/traffic') {
         const tr = commentsEndpoint() && adminToken() ? await comments.traffic().catch(() => null) : null;
-        return send(res, 200, { entries: tr ? Object.fromEntries((tr.entries ?? []).map((e) => [e.entry, { views: e.views ?? 0, likes: e.likes ?? null }])) : null });
+        return send(res, 200, { entries: tr ? Object.fromEntries((tr.entries ?? []).map((e) => [e.entry, { views: e.views, likes: e.likes }])) : null });
       }
 
       /* ── 分类：整个数组重写；改 id 时用到它的文章一起改 ── */
@@ -444,7 +437,7 @@ export async function startStudio({ root, port = 4400, dev = false }) {
 
       /* ── 表情包：列表（本地的图换成 Studio 自己的地址），和本地表情图 ── */
       if (req.method === 'GET' && p === '/api/emoji') {
-        const { packs } = emojiMod ? emojiMod.scanEmoji(join(root, 'public')) : { packs: [] };
+        const { packs } = emojiMod.scanEmoji(join(root, 'public'));
         const local = (u) => (u.startsWith('/emoji/') ? `/api/emoji/file${u.slice(6)}` : u);
         return send(res, 200, { packs: packs.map((k) => ({ ...k, items: k.items.map((it) => ({ ...it, url: local(it.url) })) })) });
       }
@@ -481,7 +474,6 @@ export async function startStudio({ root, port = 4400, dev = false }) {
       if (req.method === 'PUT' && p === '/api/site-icon') {
         const ext = extname(url.searchParams.get('name') ?? '').toLowerCase();
         if (!ICON_EXT.has(ext)) return send(res, 400, { error: '图标要是 SVG、PNG、ICO、JPG 或 WebP' });
-        if (!siteIcons) return send(res, 400, { error: '项目的主题版本太旧，还不支持站点图标' });
         const body = await readBody(req, 5 * 1024 * 1024);
         const wasUp = await isUp();
         const pub = join(root, 'public');
@@ -554,14 +546,14 @@ export async function startStudio({ root, port = 4400, dev = false }) {
       }
 
       /* ── 文章 ── */
-      if (req.method === 'POST' && (mm = m(/^\/api\/entry\/(post|travel|page)\/([^/]+)\/(publish|unpublish|discard)$/))) {
+      if (req.method === 'POST' && (mm = m(/^\/api\/entry\/(post|page)\/([^/]+)\/(publish|unpublish|discard)$/))) {
         const [, kind, id, act] = mm;
         if (!isId(id) || !entryExists(root, kind, id)) return send(res, 404, { error: '没有这篇' });
         if (act === 'publish') return send(res, 200, { ok: true, doc: publishEntry(root, kind, id) });
         if (act === 'unpublish') { unpublishEntry(root, kind, id); return send(res, 200, { ok: true }); }
         return send(res, 200, { ok: true, ...discardDraft(root, kind, id) });
       }
-      if ((mm = m(/^\/api\/entry\/(post|travel|page)\/([^/]+)$/))) {
+      if ((mm = m(/^\/api\/entry\/(post|page)\/([^/]+)$/))) {
         const [, kind, id] = mm;
         if (!isId(id)) return send(res, 400, { error: 'id 只能用字母、数字、下划线和连字符' });
         if (req.method === 'GET') return entryExists(root, kind, id) ? send(res, 200, readEntry(root, kind, id)) : send(res, 404, { error: '没有这篇' });
@@ -582,7 +574,7 @@ export async function startStudio({ root, port = 4400, dev = false }) {
         }
         if (req.method === 'DELETE') { trashEntry(root, kind, id); return send(res, 200, { ok: true }); }
       }
-      if (req.method === 'POST' && (mm = m(/^\/api\/entry\/(post|travel|page)$/))) {
+      if (req.method === 'POST' && (mm = m(/^\/api\/entry\/(post|page)$/))) {
         const kind = mm[1];
         const { id, title, category } = await readJson(req);
         if (!isId(id)) return send(res, 400, { error: 'id 只能用字母、数字、下划线和连字符' });

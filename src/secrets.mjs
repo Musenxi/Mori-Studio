@@ -6,8 +6,6 @@
 import { execFileSync, spawnSync } from 'node:child_process';
 
 const SERVICE = 'Mori Studio';
-/** 以前的服务名；读不到时去这里找，找到就搬过来 */
-const OLD_SERVICE = 'MORI Studio';
 const NOT_FOUND = 44;
 
 export const commentsAccount = (endpoint) => `comments:${endpoint}`;
@@ -33,11 +31,7 @@ export function keychain() {
   return {
     get(account) {
       if (cache.has(account)) return cache.get(account);
-      let v = find(SERVICE, account);
-      if (!v && (v = find(OLD_SERVICE, account))) {
-        this.set(account, v);
-        spawnSync('security', ['delete-generic-password', '-s', OLD_SERVICE, '-a', account], { stdio: 'ignore' });
-      }
+      const v = find(SERVICE, account);
       cache.set(account, v);
       return v;
     },

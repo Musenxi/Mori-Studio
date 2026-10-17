@@ -1,10 +1,9 @@
 /**
  * 回收站：删除的文章、页面、图片都移进项目的 .mori-trash/（不进 git），这里列出、还原、彻底删除。
  * 每次删除在 .mori-trash/index.json 记一条：放进去的文件、它们原来在哪、哪些图挪去了共用（还原时把引用改回来）。
- * 有这份记录之前删的，按文件名推断原位置。
  */
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
-import { basename, dirname, join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { rewriteRefs } from './library.mjs';
 
 export const TRASH = '.mori-trash';
@@ -26,61 +25,9 @@ const sizeOf = (f) => {
   } catch { return 0; }
 };
 
-/** 没有记录的旧条目：按文件名推断 */
-function legacyItems(root, known) {
-  const dir = join(root, TRASH), out = [];
-  if (!existsSync(dir)) return out;
-  const ENTRY = /^(\d+)-(post|travel|page)-(.+?)(\.published)?\.json$/;
-  const entries = new Map();
-  for (const f of readdirSync(dir)) {
-    const m = ENTRY.exec(f);
-    if (!m || known.has(`${TRASH}/${f}`)) continue;
-    const [, stamp, k, id, pub] = m;
-    const kind = k === 'page' ? 'page' : 'post', folder = kind === 'page' ? 'pages' : 'posts';
-    const key = `${stamp}-${kind}-${id}`;
-    const e = entries.get(key) ?? { key: `legacy:${key}`, kind, label: id, deletedAt: +stamp, files: [] };
-    e.files.push([`${TRASH}/${f}`, pub ? `src/published/${folder}/${id}.json` : `src/content/${folder}/${id}.json`]);
-    if (!pub) { try { e.label = JSON.parse(readFileSync(join(dir, f), 'utf8')).title || id; } catch { /* 保留 id */ } }
-    const imgs = `${TRASH}/assets/${stamp}-${folder}_${id}`;
-    if (!e.files.some(([t]) => t === imgs) && existsSync(join(root, imgs)) && !known.has(imgs)) e.files.push([imgs, `src/assets/${folder}/${id}`]);
-    entries.set(key, e);
-  }
-  out.push(...entries.values());
-
-  // 图片：<时间>-<原路径，/ 换成了 _>；文章 id 里也可能有 _，用已知的 id（现有的和回收站里的）去对
-  const ids = new Set([...readdirSync(dir)].map((f) => ENTRY.exec(f)?.[3]).filter(Boolean));
-  for (const k of ['posts', 'pages']) { try { for (const f of readdirSync(join(root, 'src/content', k))) ids.add(basename(f, '.json')); } catch { /* 没有这个目录 */ } }
-  const guess = (name) => {
-    const [top, ...rest] = name.split('_');
-    if (top === 'shared' || !rest.length) return `${top}/${rest.join('_')}`;
-    const tail = rest.join('_');
-    const id = [...ids].filter((x) => tail === x || tail.startsWith(`${x}_`)).sort((a, b) => b.length - a.length)[0] ?? rest[0];
-    return tail === id ? `${top}/${id}` : `${top}/${id}/${tail.slice(id.length + 1)}`;
-  };
-  const adir = join(dir, 'assets');
-  const claimed = new Set(out.flatMap((e) => e.files.map(([t]) => t)));
-  if (existsSync(adir)) {
-    const names = readdirSync(adir);
-    for (const f of names) {
-      const t = `${TRASH}/assets/${f}`, m = /^(\d+)-(.+)$/.exec(f);
-      if (!m || known.has(t) || claimed.has(t)) continue;
-      // 实况视频跟着同名的图片走
-      if (f.endsWith('.mp4') && names.some((g) => g !== f && g.replace(/\.[^.]+$/, '') === f.replace(/\.mp4$/, ''))) continue;
-      const orig = `src/assets/${guess(m[2])}`;
-      const files = [[t, orig]];
-      const video = names.find((g) => g === f.replace(/\.[^.]+$/, '.mp4') && g !== f);
-      if (video) files.push([`${TRASH}/assets/${video}`, orig.replace(/\.[^.]+$/, '.mp4')]);
-      out.push({ key: `legacy:${t}`, kind: 'asset', label: orig.slice('src/assets/'.length), deletedAt: +m[1], files });
-    }
-  }
-  return out;
-}
-
 /** 回收站里的东西，新删的在前 */
 export function listTrash(root) {
-  const indexed = readIndex(root).filter((it) => it.files.some(([t]) => existsSync(join(root, t))));
-  const known = new Set(indexed.flatMap((it) => it.files.map(([t]) => t)));
-  return [...indexed, ...legacyItems(root, known)]
+  return readIndex(root).filter((it) => it.files.some(([t]) => existsSync(join(root, t))))
     .map((it) => ({ ...it, size: it.files.reduce((n, [t]) => n + sizeOf(join(root, t)), 0) }))
     .sort((a, b) => b.deletedAt - a.deletedAt);
 }

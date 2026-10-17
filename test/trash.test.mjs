@@ -62,20 +62,3 @@ test('原处已经有同名的就不还原；图片连同实况视频进出；�
   emptyTrash(root);
   assert.deepEqual(listTrash(root), []);
 });
-
-test('没有记录的旧条目按文件名推断原位置（文章 id 里有下划线也行）', () => {
-  const root = project();
-  mkdirSync(join(root, '.mori-trash/assets/100-posts_my_trip'), { recursive: true });
-  writeFileSync(join(root, '.mori-trash/100-post-my_trip.json'), JSON.stringify({ title: '旅行' }));
-  writeFileSync(join(root, '.mori-trash/assets/100-posts_my_trip/a.jpg'), 'x');
-  writeFileSync(join(root, '.mori-trash/assets/200-posts_my_trip_IMG_1.jpg'), 'x');
-  writeFileSync(join(root, '.mori-trash/assets/300-shared_b_c.png'), 'x');
-  const items = listTrash(root);
-  const entry = items.find((x) => x.kind === 'post');
-  assert.equal(entry.label, '旅行');
-  assert.deepEqual(entry.files.map(([, o]) => o).sort(), ['src/assets/posts/my_trip', 'src/content/posts/my_trip.json']);
-  assert.deepEqual(items.filter((x) => x.kind === 'asset').map((x) => x.label).sort(), ['posts/my_trip/IMG_1.jpg', 'shared/b_c.png']);
-  restoreTrash(root, entry.key);
-  assert.ok(existsSync(join(root, 'src/assets/posts/my_trip/a.jpg')));
-  assert.equal(read(root, 'src/content/posts/my_trip.json').title, '旅行');
-});
