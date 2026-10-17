@@ -214,6 +214,9 @@ export default function Settings() {
               <Field label="头像服务">
                 <Segmented value={edits['comments.avatar'] ?? avatarKey} onValueChange={(v) => put('comments.avatar', v)} options={[{ value: 'cravatar', label: 'Cravatar' }, { value: 'gravatar', label: 'Gravatar' }, { value: 'none', label: '不显示' }]} />
               </Field>
+              <Field label="每页条数">
+                <Input type="number" min={1} max={100} className="w-24" placeholder="20" value={edits['comments.pageSize'] ?? String(cfg.comments?.pageSize ?? '')} onChange={(e) => put('comments.pageSize', e.target.value)} />
+              </Field>
               {(infoQ.data?.features.turnstile || cfg.comments?.turnstileSiteKey) && (
                 <Field label="Turnstile" hint={infoQ.data?.features.turnstile && !turnstileKey.trim() ? <span className="text-destructive">评论服务开了人机验证，没有站点密钥读者发不了评论。</span> : undefined}>
                   <Input variant="mono" spellCheck={false} placeholder="站点密钥（Site Key）" value={turnstileKey} onChange={(e) => put('comments.turnstileSiteKey', e.target.value)} />

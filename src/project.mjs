@@ -151,7 +151,9 @@ const BLOCK_KEYS = { 'home.style': ['quote', 'cover', 'list'], 'home.direction':
 /** 块里的自由文字：空字符串就删掉这一行 */
 const STR_BLOCK_KEYS = new Set(['author.name', 'author.email', 'author.url', 'comments.turnstileSiteKey']);
 /** 数字取值的设置：[最小, 最大]，写进文件时不带引号 */
-const NUM_KEYS = { 'home.count': [1, 8] };
+const NUM_KEYS = { 'home.count': [1, 8], 'comments.pageSize': [1, 100] };
+/** 数字设置里允许留空（删掉这一行）的 */
+const NUM_OPTIONAL = new Set(['comments.pageSize']);
 /** 最外层的数字设置：允许的范围 */
 const TOP_NUM_KEYS = { since: [1900, 2100] };
 const quote = (v) => `'${String(v).replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\n/g, '\\n')}'`;
@@ -203,8 +205,9 @@ function setBlockValue(configPath, dotted, value) {
   let lit; // 写进文件的字面量：字符串带引号，数字不带
   if (dotted in NUM_KEYS) {
     const [min, max] = NUM_KEYS[dotted], n = Number(value);
-    if (!Number.isInteger(n) || n < min || n > max) throw new Error(`${dotted} 要是 ${min}–${max} 的整数`);
-    lit = String(n);
+    if (NUM_OPTIONAL.has(dotted) && (value == null || String(value).trim() === '')) lit = null;
+    else if (!Number.isInteger(n) || n < min || n > max) throw new Error(`${dotted} 要是 ${min}–${max} 的整数`);
+    else lit = String(n);
   } else if (STR_BLOCK_KEYS.has(dotted)) {
     value = String(value ?? '').trim();
     if (value.length > 200) throw new Error(`${dotted} 太长了`);
@@ -239,7 +242,7 @@ function writeBlockValue(configPath, dotted, lit) {
   let next;
   if (lit === null) {
     // 删掉这一项（连同逗号）；块空了就整个删掉
-    next = body.replace(new RegExp(`[ \\t]*\\b${key}[ \\t]*:[ \\t]*(['"\`])(?:\\\\.|(?!\\1).)*\\1[ \\t]*,?[ \\t]*(\\n)?`), '');
+    next = body.replace(new RegExp(`[ \\t]*\\b${key}[ \\t]*:[ \\t]*(?:(['"\`])(?:\\\\.|(?!\\1).)*\\1|\\d+)[ \\t]*,?[ \\t]*(\\n)?`), '');
     if (!next.trim()) {
       const head = src.slice(0, open.index), tail = src.slice(end + 1).replace(/^[ \t]*,?[ \t]*\n?/, '');
       writeFileSync(configPath, head + tail);

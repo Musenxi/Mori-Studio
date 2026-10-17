@@ -42,7 +42,7 @@ export interface Project {
     home?: { style?: 'quote' | 'cover' | 'list'; count?: number; direction?: 'h' | 'v'; tocDirection?: 'h' | 'v'; editorNote?: string };
     archive?: { direction?: 'h' | 'v' };
     feed?: { content?: 'excerpt' | 'full' };
-    comments?: { avatar?: string; status?: 'on' | 'readonly' | 'off'; turnstileSiteKey?: string };
+    comments?: { avatar?: string; status?: 'on' | 'readonly' | 'off'; turnstileSiteKey?: string; pageSize?: number };
     nav: NavItem[] | null;
     actions: Action[] | null;
     actionsLayout: 'merged' | 'split';
