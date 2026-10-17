@@ -1,6 +1,6 @@
-# 推 v* 标签时打包桌面版（macOS 两种芯片 + Windows），传到 GitHub Release 草稿（检查后手动发布，已装的应用才会收到更新）
+# 推 v* 标签时打包桌面版（macOS 两种芯片 + Windows），传到同一个 GitHub Release 草稿（检查后手动发布，已装的应用才会收到更新）
 # 手动运行（workflow_dispatch）只打包，不建 Release，安装包在这次运行的 Artifacts 里
-# 要先在仓库的 Secrets 里放 TAURI_SIGNING_PRIVATE_KEY（更新包的签名私钥），见 README“发布桌面版”
+# 要先在仓库的 Secrets 里放 TAURI_SIGNING_PRIVATE_KEY（更新包的签名私钥）
 name: 发布桌面版
 
 on:
@@ -12,7 +12,29 @@ permissions:
   contents: write
 
 jobs:
+  # 先建好草稿，三个打包任务都往这一个里传（各自去建会同时建出好几个）
+  release:
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    outputs:
+      id: ${{ steps.create.outputs.id }}
+    steps:
+      - id: create
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+          BODY: |
+            需要本机装有 Node.js 22.12 或更新。
+            macOS：应用没有 Apple 签名，第一次打开前在终端运行 xattr -cr "/Applications/Mori Studio.app"
+            Windows：安装时如果提示“Windows 已保护你的电脑”，点“更多信息 → 仍要运行”。
+        run: |
+          id=$(gh api "repos/$GITHUB_REPOSITORY/releases" -f tag_name="$TAG" -f name="Mori Studio $TAG" -f body="$BODY" -F draft=true --jq .id)
+          echo "id=$id" >> "$GITHUB_OUTPUT"
+
   build:
+    needs: release
+    # 手动运行时没有 release 这一步（跳过），照样打包
+    if: ${{ !failure() && !cancelled() }}
     strategy:
       fail-fast: false
       matrix:
@@ -45,12 +67,6 @@ jobs:
           projectPath: desktop
           # 从 desktop/ 里直接用 node 跑 CLI：打包前的 stage-studio 按当前目录找，Windows 上也不用找 .cmd
           tauriScript: node ../node_modules/@tauri-apps/cli/tauri.js
-          tagName: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
-          releaseName: Mori Studio ${{ github.ref_name }}
-          releaseBody: |
-            需要本机装有 Node.js 22.12 或更新。
-            macOS：应用没有 Apple 签名，第一次打开前在终端运行 xattr -cr "/Applications/Mori Studio.app"
-            Windows：安装时如果提示“Windows 已保护你的电脑”，点“更多信息 → 仍要运行”。
-          releaseDraft: true
+          releaseId: ${{ needs.release.outputs.id }}
           uploadWorkflowArtifacts: ${{ github.ref_type != 'tag' }}
           args: --target ${{ matrix.target }}
