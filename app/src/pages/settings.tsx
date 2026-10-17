@@ -131,22 +131,21 @@ export default function Settings() {
         <Section title="刊名与简介"><Card>
           <Field label="刊名"><Input value={title} onChange={(e) => setTitle(e.target.value)} /></Field>
           <Field label="简介"><Input value={description} onChange={(e) => setDescription(e.target.value)} /></Field>
+          <Field label="建站年份"><Input type="number" min={1900} max={2100} className="w-24" value={edits.since ?? String(cfg.since ?? '')} onChange={(e) => put('since', e.target.value)} /></Field>
         </Card></Section>
 
-        {cfg.icon !== null && (
-          <Section title="站点图标"><Card>
-            <div className="flex flex-wrap items-center gap-3">
-              {cfg.iconPresets.map(([id, label]) => (
-                <IconTile key={id} src={`/api/site-icon?preset=${id}`} label={label} selected={icon === id} onClick={() => setIcon(id)} />
-              ))}
-              {!cfg.iconPresets.some(([id]) => id === cfg.icon) && (
-                <IconTile src={`/api/site-icon?v=${cfg.iconStamp}`} label={cfg.icon ?? ''} selected={icon === cfg.icon} onClick={() => setIcon(cfg.icon)} />
-              )}
-              <Button onClick={() => iconInput.current?.click()} disabled={busy}>上传图片…</Button>
-              <input ref={iconInput} type="file" accept=".svg,.png,.ico,.jpg,.jpeg,.webp" hidden onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) void uploadIcon(f); }} />
-            </div>
-          </Card></Section>
-        )}
+        <Section title="站点图标"><Card>
+          <div className="flex flex-wrap items-center gap-3">
+            {cfg.iconPresets.map(([id, label]) => (
+              <IconTile key={id} src={`/api/site-icon?preset=${id}`} label={label} selected={icon === id} onClick={() => setIcon(id)} />
+            ))}
+            {!cfg.iconPresets.some(([id]) => id === cfg.icon) && (
+              <IconTile src={`/api/site-icon?v=${cfg.iconStamp}`} label={cfg.icon ?? ''} selected={icon === cfg.icon} onClick={() => setIcon(cfg.icon)} />
+            )}
+            <Button onClick={() => iconInput.current?.click()} disabled={busy}>上传图片…</Button>
+            <input ref={iconInput} type="file" accept=".svg,.png,.ico,.jpg,.jpeg,.webp" hidden onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) void uploadIcon(f); }} />
+          </div>
+        </Card></Section>
 
         <Section title="作者"><Card>
           <Field label="名字"><Input value={edits['author.name'] ?? cfg.author.name ?? ''} onChange={(e) => put('author.name', e.target.value)} /></Field>

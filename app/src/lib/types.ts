@@ -35,7 +35,7 @@ export interface Project {
   configPath: string;
   dev: boolean;
   config: {
-    title: string; description: string; accent: string; accentDark?: string; lang: string;
+    title: string; description: string; since: number | null; accent: string; accentDark?: string; lang: string;
     /** 站点图标：预设 id 或 public/ 里的地址。iconStamp 是图标文件的修改时间，换了图就变 */
     icon: string; iconStamp: number; iconPresets: Array<[string, string]>;
     categories: Category[];

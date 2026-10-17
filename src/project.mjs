@@ -152,6 +152,8 @@ const BLOCK_KEYS = { 'home.style': ['quote', 'cover', 'list'], 'home.direction':
 const STR_BLOCK_KEYS = new Set(['author.name', 'author.email', 'author.url', 'comments.turnstileSiteKey']);
 /** 数字取值的设置：[最小, 最大]，写进文件时不带引号 */
 const NUM_KEYS = { 'home.count': [1, 8] };
+/** 最外层的数字设置：允许的范围 */
+const TOP_NUM_KEYS = { since: [1900, 2100] };
 const quote = (v) => `'${String(v).replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\n/g, '\\n')}'`;
 
 /**
@@ -160,10 +162,11 @@ const quote = (v) => `'${String(v).replace(/\\/g, '\\\\').replace(/'/g, "\\'").r
  */
 export function setConfigValue(configPath, key, value) {
   if (key in BLOCK_KEYS || key in NUM_KEYS || STR_BLOCK_KEYS.has(key)) return setBlockValue(configPath, key, value);
-  if (!CONFIG_KEYS.has(key)) throw new Error(`不支持修改 ${key}`);
+  if (!CONFIG_KEYS.has(key) && !(key in TOP_NUM_KEYS)) throw new Error(`不支持修改 ${key}`);
   let src = readFileSync(configPath, 'utf8');
   // 只认配置对象最外层那一级缩进的 key：嵌套对象里同名的（比如页头操作里的 icon: 'search'）不算；editorNote 本来就在 home: { } 里
   const top = key === 'editorNote' ? '[ \\t]*' : src.match(/(?:defineMoriConfig\(\{|export default \{)[ \t]*\n(?:[ \t]*(?:\/\/.*)?\n)*([ \t]*)\S/)?.[1] ?? '  ';
+  if (key in TOP_NUM_KEYS) return writeFileSync(configPath, setTopNumber(src, top, key, value));
   // 行尾允许有逗号和 // 注释，替换时原样保留
   const line = new RegExp(`^(${top})${key}[ \\t]*:[ \\t]*(['"\`])(?:\\\\.|(?!\\2).)*\\2([ \\t]*,?)([ \\t]*\\/\\/.*)?$`, 'm');
   if (value === null) {
@@ -178,6 +181,18 @@ export function setConfigValue(configPath, key, value) {
     src = src.replace(open[0], `${open[0]}  ${key}: ${quote(value)},\n`);
   }
   writeFileSync(configPath, src);
+}
+
+/** 最外层的数字设置（since）：空值删掉这一行，有就替换，没有就插到配置对象开头 */
+function setTopNumber(src, top, key, value) {
+  const line = new RegExp(`^(${top})${key}[ \\t]*:[ \\t]*-?\\d+([ \\t]*,?)([ \\t]*\\/\\/.*)?$`, 'm');
+  if (value === null || value === undefined || String(value).trim() === '') return src.replace(new RegExp(line.source + '\\n?', 'm'), '');
+  const [min, max] = TOP_NUM_KEYS[key], n = Number(value);
+  if (!Number.isInteger(n) || n < min || n > max) throw new Error(`${key} 要是 ${min}–${max} 的整数`);
+  if (line.test(src)) return src.replace(line, (_, indent, tail, comment) => `${indent}${key}: ${n}${tail}${comment ?? ''}`);
+  const open = src.match(/(defineMoriConfig\(\{|export default \{)[ \t]*\n/);
+  if (!open) throw new Error('没在 mori.config.ts 里找到配置对象的开头，请手动添加。');
+  return src.replace(open[0], `${open[0]}  ${key}: ${n},\n`);
 }
 
 /**

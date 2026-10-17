@@ -205,3 +205,14 @@ test('接入第三方评论：整块换掉（自建的设置也不留）；必�
   assert.throws(() => setThirdPartyComments(f, 'waline', { serverURL: 'waline' }), /网址/);
   assert.throws(() => setThirdPartyComments(f, 'valine', {}), /不认识/);
 });
+
+test('建站年份：写成数字；改、删都只动这一行；范围不对报错', () => {
+  const f = make();
+  setConfigValue(f, 'since', '2019');
+  assert.match(readFileSync(f, 'utf8'), /defineMoriConfig\(\{\n  since: 2019,\n  title:/);
+  setConfigValue(f, 'since', 2021);
+  assert.equal(readFileSync(f, 'utf8').match(/since: 2021,/g).length, 1);
+  assert.throws(() => setConfigValue(f, 'since', '20x'), /since/);
+  setConfigValue(f, 'since', '');
+  assert.doesNotMatch(readFileSync(f, 'utf8'), /since/);
+});
