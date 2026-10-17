@@ -569,7 +569,7 @@ export const VPOS = { start: 'justify-start', center: 'justify-center', end: 'ju
  * 文字框（一列文字或一个标题）：改字时整块是一个 contentEditable，里面每段是一个单元。
  * size：竖排时是高度，横排时是宽度（标题横排时按字宽，不设）
  */
-export function TextFace({ b, v, fs, lh, size, minH, minW, cols, gapX, align, editing }: { b: Doc; v: boolean; fs: number; lh?: number; size?: number; minH?: number; minW?: number; cols?: number; gapX?: number; align?: string; editing: boolean }) {
+export function TextFace({ b, v, fs, lh, size, minH, minW, cols, gapX, hug, align, editing }: { b: Doc; v: boolean; fs: number; lh?: number; size?: number; minH?: number; minW?: number; cols?: number; gapX?: number; hug?: boolean; align?: string; editing: boolean }) {
   const L = useLayout();
   const ref = useRef<HTMLDivElement>(null);
   useEditHost(ref, editing, L.edit);
@@ -583,6 +583,8 @@ export function TextFace({ b, v, fs, lh, size, minH, minW, cols, gapX, align, ed
     if (!v) {
       const flow = () => {
         Object.assign(el.style, { width: '', height: '', columnWidth: '', columnGap: '', columnFill: '' });
+        // 没给宽度（横排标题）：量出一行排开要多宽，写成明确的宽度。不然 Chrome 算横卷总宽时按最窄的宽度算，末尾的块会掉到舞台外面
+        if (hug) { el.style.width = 'max-content'; el.style.width = `${Math.ceil(el.getBoundingClientRect().width)}px`; return; }
         if (!cols || !size || el.scrollHeight <= cols + 1) return;
         Object.assign(el.style, { height: `${cols}px`, columnWidth: `${size}px`, columnGap: `${gapX ?? 0}px`, columnFill: 'auto' });
         for (let n = Math.max(2, Math.ceil(el.scrollHeight / cols)); n < 40; n++) { el.style.width = `${n * size + (n - 1) * (gapX ?? 0)}px`; if (el.scrollWidth <= el.clientWidth + 1) break; }
@@ -620,7 +622,7 @@ function Face({ b, g, scale, places, here, active, editing, onPatch }: { b: Doc;
       // 拖出来的宽高（bw / bh，屏高的倍数）优先；横排的字比框高就排成几栏（和站点一样）。浮起来的文字不撑到文字框的高度
       const bh = b.bh !== undefined ? Math.min(b.bh * g.S, g.inner) : undefined, bw = b.bw !== undefined ? b.bw * g.S : undefined;
       if (v) return <TextFace b={b} v fs={fz} lh={b.lh} align={b.align} editing={editing} minW={bw} size={bh ?? (head ? g.th : Math.min(g.th * scale, g.inner))} />;
-      return <TextFace b={b} v={false} fs={fz} lh={b.lh} align={b.align} editing={editing} minH={bh ?? (b.x === undefined ? g.th : undefined)} cols={bh !== undefined || b.x === undefined ? bh ?? g.th : undefined} gapX={g.gap * 0.6} size={bw ?? (head ? undefined : fz * 23 * scale)} />;
+      return <TextFace b={b} v={false} fs={fz} lh={b.lh} align={b.align} editing={editing} minH={bh ?? (b.x === undefined ? g.th : undefined)} cols={bh !== undefined || b.x === undefined ? bh ?? g.th : undefined} gapX={g.gap * 0.6} hug={head && bw === undefined} size={bw ?? (head ? undefined : fz * 23 * scale)} />;
     }
     case 'image':
       return <figure className="relative max-w-(--mw)" style={{ '--mw': px(g.S * 2.2), '--h': px(H) }}><Img src={b.src} className="h-(--h) w-auto" />{cap(b.caption)}</figure>;
