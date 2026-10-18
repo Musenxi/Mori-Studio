@@ -143,6 +143,7 @@ export default function Settings() {
         <Section title="刊名与简介"><Card>
           <Field label="刊名"><Input value={title} onChange={(e) => setTitle(e.target.value)} /></Field>
           <Field label="简介"><Input value={description} onChange={(e) => setDescription(e.target.value)} /></Field>
+          <Field label="网址"><Input type="url" placeholder="https://" value={edits.site ?? cfg.site ?? ''} onChange={(e) => put('site', e.target.value)} /></Field>
           <Field label="建站年份"><Input type="number" min={1900} max={2100} className="w-24" value={edits.since ?? String(cfg.since ?? '')} onChange={(e) => put('since', e.target.value)} /></Field>
         </Card></Section>
 
