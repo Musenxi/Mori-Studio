@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Ban, Check, EyeOff, RefreshCw, Reply, Trash2 } from 'lucide-react';
+import { Ban, Check, EyeOff, Pencil, RefreshCw, Reply, Trash2 } from 'lucide-react';
 import { Link } from 'react-router';
 import { toast } from 'sonner';
 import { ApiError, api, type CommentRow } from '@/lib/api';
@@ -51,6 +51,7 @@ function List() {
   const qc = useQueryClient();
   const [tab, setTab] = useState<Tab>('all');
   const [replying, setReplying] = useState<number | null>(null);
+  const [editing, setEditing] = useState<number | null>(null);
   const list = useQuery({ queryKey: ['comments', tab], queryFn: () => api.comments(tab === 'all' ? undefined : tab), staleTime: 0 });
   const stats = useQuery({ queryKey: ['comment-stats'], queryFn: api.commentStats, staleTime: 0 });
   // 评论记的是 posts/<id> 或 pages/<id>，和 Studio 编辑器的路由一样；文章已经删了就只显示文字
@@ -92,14 +93,16 @@ function List() {
                   {m.parentId && <span className="mono rounded-full bg-foreground/[.06] px-2 py-px text-11">回复 #{m.parentId}</span>}
                 </div>
                 {m.quote && <blockquote className="my-2.5 rounded-lg bg-foreground/[.05] px-3.5 py-2 text-13 text-soft-foreground">{m.quote}</blockquote>}
-                <CommentBody text={m.body} />
+                {editing === m.id ? null : <CommentBody text={m.body} />}
                 <div className="-ml-2.5 mt-2 flex gap-1">
-                  {m.status !== 'hidden' && m.status !== 'spam' && <Button variant="ghost" size="sm" onClick={() => setReplying(replying === m.id ? null : m.id)}><Reply size={14} />回复</Button>}
+                  {m.status !== 'hidden' && m.status !== 'spam' && <Button variant="ghost" size="sm" onClick={() => { setEditing(null); setReplying(replying === m.id ? null : m.id); }}><Reply size={14} />回复</Button>}
+                  <Button variant="ghost" size="sm" onClick={() => { setReplying(null); setEditing(editing === m.id ? null : m.id); }}><Pencil size={14} />编辑</Button>
                   {m.status !== 'approved' && <Button variant="ghost" size="sm" onClick={() => act(() => api.setCommentStatus(m.id, 'approved'))}><Check size={14} />通过</Button>}
                   {m.status !== 'hidden' && <Button variant="ghost" size="sm" onClick={() => act(() => api.setCommentStatus(m.id, 'hidden'))}><EyeOff size={14} />隐藏</Button>}
                   {m.status !== 'spam' && <Button variant="ghost" size="sm" onClick={() => act(() => api.setCommentStatus(m.id, 'spam'))}><Ban size={14} />垃圾</Button>}
                   <Button variant="ghost-danger" size="sm" onClick={async () => { if (await confirm({ title: '永久删除这条评论？', description: '它下面的回复也会一起删除，不能恢复。', confirmLabel: '删除', danger: true })) void act(() => api.removeComment(m.id)); }}><Trash2 size={14} />删除</Button>
                 </div>
+                {editing === m.id && <ReplyBox to={m} edit onDone={async () => { setEditing(null); await reload(); }} onCancel={() => setEditing(null)} />}
                 {replying === m.id && <ReplyBox to={m} onDone={async () => { setReplying(null); await reload(); }} onCancel={() => setReplying(null)} />}
               </div>
             </article>
@@ -112,26 +115,29 @@ function List() {
 }
 
 /** 以博主身份回复（名字、邮箱、网址取设定里的作者）。回复待审的评论时，那条一起通过；回复的是回复，发出去时在前面带上 @名字（和站点上一样，不放进输入框） */
-function ReplyBox({ to, onDone, onCancel }: { to: CommentRow; onDone: () => Promise<void>; onCancel: () => void }) {
+function ReplyBox({ to, edit, onDone, onCancel }: { to: CommentRow; edit?: boolean; onDone: () => Promise<void>; onCancel: () => void }) {
   const { data: project } = useProject();
-  const [text, setText] = useState('');
+  const [text, setText] = useState(edit ? to.body : '');
   const [busy, setBusy] = useState(false);
   const [preview, setPreview] = useState(false);
   const area = useRef<HTMLTextAreaElement>(null);
   const author = project?.config.author.name;
   const [kind, id] = to.entry.split('/');
   const title = (kind === 'pages' ? project?.pages : project?.entries)?.find((e) => e.id === id)?.title;
-  if (!author) return <p className="mt-3 text-soft-foreground">还没有填作者名字：<Link to="/settings" className="text-foreground underline underline-offset-2">设定 → 作者</Link></p>;
+  if (!edit && !author) return <p className="mt-3 text-soft-foreground">还没有填作者名字：<Link to="/settings" className="text-foreground underline underline-offset-2">设定 → 作者</Link></p>;
   const send = async () => {
     setBusy(true);
-    try { await api.postComment(to.entry, (to.parentId ? `@${to.name} ` : '') + text.trim(), to.id, title); toast.success('已发表'); await onDone(); } catch (e) { toast.error((e as Error).message); }
+    try {
+      if (edit) { await api.editComment(to.id, text.trim()); toast.success('已保存'); } else { await api.postComment(to.entry, (to.parentId ? `@${to.name} ` : '') + text.trim(), to.id, title); toast.success('已发表'); }
+      await onDone();
+    } catch (e) { toast.error((e as Error).message); }
     setBusy(false);
   };
   return (
     <form className="mt-3" onSubmit={(e) => { e.preventDefault(); if (text.trim()) void send(); }}>
       {preview
-        ? <div className="min-h-18 rounded-lg border border-border px-3 py-2 text-13-5">{text.trim() ? <CommentBody text={(to.parentId ? `@${to.name} ` : '') + text.trim()} /> : <span className="text-muted-foreground">没有内容</span>}</div>
-        : <Textarea ref={area} autoFocus rows={3} value={text} onChange={(e) => setText(e.target.value)} placeholder={`以 ${author} 回复 ${to.name}`} />}
+        ? <div className="min-h-18 rounded-lg border border-border px-3 py-2 text-13-5">{text.trim() ? <CommentBody text={(!edit && to.parentId ? `@${to.name} ` : '') + text.trim()} /> : <span className="text-muted-foreground">没有内容</span>}</div>
+        : <Textarea ref={area} autoFocus rows={3} value={text} onChange={(e) => setText(e.target.value)} placeholder={edit ? undefined : `以 ${author} 回复 ${to.name}`} />}
       <div className="mt-2 flex items-center justify-end gap-2">
         {!preview && <EmojiPicker btnClass="grid h-8 w-8 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground" onClose={() => area.current?.focus()} onPick={(key) => {
           const a = area.current, at = a ? [a.selectionStart, a.selectionEnd] : [text.length, text.length], ins = `:[${key}]`;
@@ -140,7 +146,7 @@ function ReplyBox({ to, onDone, onCancel }: { to: CommentRow; onDone: () => Prom
         }} />}
         <Button type="button" variant="ghost" size="sm" className="mr-auto" onClick={() => setPreview(!preview)}>{preview ? '编辑' : '预览'}</Button>
         <Button type="button" variant="ghost" size="sm" onClick={onCancel}>取消</Button>
-        <Button type="submit" size="sm" disabled={busy || !text.trim()}>发表</Button>
+        <Button type="submit" size="sm" disabled={busy || !text.trim()}>{edit ? '保存' : '发表'}</Button>
       </div>
     </form>
   );

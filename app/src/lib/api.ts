@@ -162,6 +162,7 @@ export const api = {
   testCommentMail: () => req<{ ok: boolean }>('POST', '/api/comments/mail/test'),
   postComment: (entry: string, body: string, parentId?: number, title?: string) => req('POST', '/api/comments', { entry, body, parentId, title }),
   setCommentStatus: (id: number, status: string) => req('PATCH', `/api/comments/${id}`, { status }),
+  editComment: (id: number, body: string) => req('PATCH', `/api/comments/${id}`, { body }),
   removeComment: (id: number) => req('DELETE', `/api/comments/${id}`),
   clearSpam: () => req<{ removed: number }>('DELETE', '/api/comments/spam'),
   setCommentToken: (token: string) => req('PUT', '/api/comments/token', { token }),

@@ -79,6 +79,7 @@ export function commentsClient({ endpoint, token }) {
     traffic: () => call('GET', '/traffic'),
     reply: (c) => call('POST', '/comments', c),
     setStatus: (id, status) => call('PATCH', `/comments/${id}`, { status }),
+    setBody: (id, body) => call('PATCH', `/comments/${id}`, { body }),
     remove: (id) => call('DELETE', `/comments/${id}`),
     clearSpam: () => call('DELETE', '/spam'),
     settings: () => call('GET', '/settings'),

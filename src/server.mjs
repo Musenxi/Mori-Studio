@@ -540,7 +540,7 @@ export async function startStudio({ root, port = 4400, dev = false }) {
             await restartPreview(wasUp, true);
             return send(res, 200, { ok: true });
           }
-          if (mm[2] && req.method === 'PATCH') return send(res, 200, await comments.setStatus(mm[2], (await readJson(req)).status));
+          if (mm[2] && req.method === 'PATCH') { const j = await readJson(req); return send(res, 200, typeof j.body === 'string' ? await comments.setBody(mm[2], j.body) : await comments.setStatus(mm[2], j.status)); }
           if (mm[2] && req.method === 'DELETE') return send(res, 200, await comments.remove(mm[2]));
         } catch (e) { return send(res, e.code ?? 500, { error: e.message }); }
       }
