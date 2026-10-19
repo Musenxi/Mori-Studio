@@ -726,8 +726,9 @@ export async function startStudio({ root, port = 4400, dev = false }) {
         const wasUp = await isUp();
         const finish = async (text, code) => res.end(`${text}${await restartPreview(wasUp)}[exit ${code}]\n`);
         await syncBeforeBuild((t) => res.write(t));
-        res.write('▸ 构建\n');
-        pipe(runAstro(['build'], { env: { ...process.env, FORCE_COLOR: '0' } }), async (code) => {
+        const skipBuild = url.searchParams.get('build') === '0'; // 只发布：用上一次构建的结果
+        if (skipBuild && pub.target !== 'git' && !existsSync(join(root, 'dist'))) return finish('还没有构建结果（dist/），先构建一次。\n', 2);
+        const built = async (code) => {
           if (code) return finish('\n构建失败，没有发布。\n', code);
           res.write(`\n▸ 发布：${target.label}\n`);
           if (multi) {
@@ -735,7 +736,10 @@ export async function startStudio({ root, port = 4400, dev = false }) {
             return finish(`\n${c ? '发布失败' : '已发布'}\n`, c);
           }
           pipe(spawn(target.cmd, target.args, { cwd: root, env: childEnv({ ...process.env, FORCE_COLOR: '0' }) }), (c) => finish(`\n${c ? '发布失败' : '已发布'}\n`, c));
-        });
+        };
+        if (skipBuild) return built(0);
+        res.write('▸ 构建\n');
+        pipe(runAstro(['build'], { env: { ...process.env, FORCE_COLOR: '0' } }), built);
         return;
       }
 

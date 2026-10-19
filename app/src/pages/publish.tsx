@@ -30,7 +30,7 @@ export default function Publish() {
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState<PublishConfig>({ target: 'git' });
   const [log, setLog] = useState('');
-  const [busy, setBusy] = useState<'build' | 'publish' | null>(null);
+  const [busy, setBusy] = useState<'build' | 'publish' | 'push' | null>(null);
   const [code, setCode] = useState<number | null>(null);
   const logRef = useRef<HTMLPreElement>(null);
   useEffect(() => { setEditing(!pub); if (pub) setForm(pub); }, [pub === null]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -39,12 +39,12 @@ export default function Publish() {
   const savePublish = async (value: PublishConfig | null) => {
     try { await api.setPublish(value); await refresh(); if (value) { setEditing(false); toast.success('已保存'); } } catch (e) { toast.error((e as Error).message); }
   };
-  const run = async (kind: 'build' | 'publish') => {
-    if (kind === 'publish' && !(await confirm({ title: '发布到线上？', description: `会把当前内容发布到：${describe(pub)}。线上的站点会随之更新。`, confirmLabel: '构建并发布' }))) return;
+  const run = async (kind: 'build' | 'publish' | 'push') => {
+    if (kind !== 'build' && !(await confirm({ title: '发布到线上？', description: `会把当前内容发布到：${describe(pub)}。线上的站点会随之更新。`, confirmLabel: kind === 'push' ? '发布' : '构建并发布' }))) return;
     setBusy(kind); setCode(null); setLog('');
-    const c = await (kind === 'publish' ? api.publish : api.build)(setLog);
+    const c = await (kind === 'build' ? api.build(setLog) : api.publish(setLog, kind === 'publish'));
     setCode(c); setBusy(null);
-    if (c === 0) toast.success(kind === 'publish' ? '已发布' : '构建完成'); else toast.error('没有成功，看下面的输出');
+    if (c === 0) toast.success(kind === 'build' ? '构建完成' : '已发布'); else toast.error('没有成功，看下面的输出');
   };
   const set = (p: Partial<PublishConfig>) => setForm({ ...form, ...p });
   const targets = (Object.keys(TARGETS) as Array<keyof typeof TARGETS>).filter((k) => k !== 'local' || project?.dev || pub?.target === 'local');
@@ -85,6 +85,7 @@ export default function Publish() {
         <Section title="更新站点"><Card>
           <div className="flex gap-2">
             <Button variant="default" disabled={!!busy || !pub} title={pub ? undefined : '先在上面设置发布到哪里'} onClick={() => run('publish')}><Send size={14} />{busy === 'publish' ? '发布中……' : '构建并发布'}</Button>
+            <Button disabled={!!busy || !pub} title={pub ? undefined : '先在上面设置发布到哪里'} onClick={() => run('push')}><Send size={14} />{busy === 'push' ? '发布中……' : '只发布'}</Button>
             <Button disabled={!!busy} onClick={() => run('build')}><Hammer size={14} />{busy === 'build' ? '构建中……' : '只构建'}</Button>
           </div>
           {log && <pre ref={logRef} className="mono mt-4 max-h-[50vh] overflow-auto whitespace-pre-wrap rounded-xl bg-console p-4 text-11-5 leading-relaxed text-console-foreground ring-1 ring-white/5">{log}</pre>}

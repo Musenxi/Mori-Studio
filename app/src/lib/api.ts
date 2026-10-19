@@ -184,7 +184,7 @@ export const api = {
   gitInit: (url: string, branch: string) => req<GitInfo>('POST', '/api/git/init', { url, branch }),
   setPublish: (publish: PublishConfig | null) => req<{ ok: true; publish: PublishConfig | null }>('PUT', '/api/publish-config', { publish }),
   build: (onChunk: (t: string) => void) => stream('/api/build', onChunk),
-  publish: (onChunk: (t: string) => void) => stream('/api/publish', onChunk),
+  publish: (onChunk: (t: string) => void, build = true) => stream(build ? '/api/publish' : '/api/publish?build=0', onChunk),
 };
 
 const extOf = (n: string) => n.slice(n.lastIndexOf('.')).toLowerCase();
