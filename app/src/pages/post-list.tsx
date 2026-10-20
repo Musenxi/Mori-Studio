@@ -35,7 +35,7 @@ export default function PostList({ view }: { view: 'all' | 'draft' }) {
   const isMori = project?.comments.provider === 'mori' && project.comments.hasToken;
   const { data: traffic } = useQuery({ queryKey: ['traffic'], queryFn: api.traffic, enabled: !!isMori, staleTime: 10_000 });
   const counts = traffic?.entries;
-  const countOf = useCallback((e: EntrySummary, k: 'views' | 'likes') => counts?.[`posts/${e.id}`]?.[k] ?? 0, [counts]);
+  const countOf = useCallback((e: EntrySummary, k: 'views' | 'likes') => counts?.[`posts/${e.id.toLowerCase()}`]?.[k] ?? 0, [counts]);
   const cats = useMemo(() => project?.config.categories ?? [], [project?.config.categories]);
   const catName = useCallback((id?: string) => cats.find((c) => c.id === id)?.zh ?? id ?? '', [cats]);
   const base = useMemo(() => (project?.entries ?? []).filter((e) => (view === 'draft' ? e.draft || e.changed : true)), [project, view]);
