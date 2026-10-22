@@ -397,8 +397,8 @@ export function Img({ src, style, className }: { src?: string; style?: React.CSS
   return <img src={imgSrc(src)} alt="" draggable={false} loading="lazy" className={cn('block max-w-none bg-muted object-cover', className)} style={style} />;
 }
 
-/** 图下面的一行图注；宽度跟着图走（w-0 min-w-full），不把图撑宽 */
-export const Cap = ({ text, size }: { text?: string; size: number }) => text ? <p className="mt-1.5 w-0 min-w-full text-(length:--fs) leading-snug text-muted-foreground" style={{ '--fs': px(size) }}>{text}</p> : null;
+/** 图下面的一行图注（图组里前面是第几张 / 共几张）；宽度跟着图走（w-0 min-w-full），不把图撑宽 */
+export const Cap = ({ text, size, no }: { text?: string; size: number; no?: string }) => text || no ? <p className="mt-1.5 flex w-0 min-w-full items-baseline gap-[.8em] text-(length:--fs) leading-snug text-muted-foreground" style={{ '--fs': px(size) }}>{no && <span className="mono shrink-0 tabular-nums">{no}</span>}{text}</p> : null;
 
 /** 行内文字（不能编辑的地方用，比如自由排布里的小字）：粗、斜、代码、链接照样显示，旁注只留一个小记号，地点前面有个定位图标 */
 export function Spans({ text, dots = true }: { text: unknown; dots?: boolean }) {
@@ -452,7 +452,7 @@ export function StripFace({ b, H, fs, rtl, active, onPatch }: { b: Doc; H: numbe
               <Img src={im.src} className="h-(--h) w-auto" style={{ '--h': px(H * s) }} />
               {active && <Knob inside onDown={(e) => { const h0 = H * s; start(e, (_dx, dy) => put(i, { scale: r2(clamp((s * (h0 + dy)) / h0, 0.3, 1.6)) })); }} />}
             </span>
-            <Cap text={im.caption} size={fs * 0.72} />
+            <Cap text={im.caption} size={fs * 0.72} no={`${i + 1}/${items.length}`} />
           </span>
         );
       })}
