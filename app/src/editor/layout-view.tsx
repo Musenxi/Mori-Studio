@@ -432,8 +432,9 @@ function useItemDrag<T extends Doc>(list: T[], onPatch: (next: T[]) => void) {
   return { items: live ?? list, start };
 }
 
-const Knob = ({ onDown }: { onDown: (e: React.PointerEvent) => void }) => (
-  <span onPointerDown={onDown} className="absolute -bottom-2.25 -right-2.25 z-30 grid h-4.5 w-4.5 cursor-nwse-resize place-items-center rounded-full bg-popover shadow-pop"><i className="h-1.5 w-1.5 rounded-full bg-primary" /></span>
+/** 改大小的圆点。inside：放在图的角里面（图组里每张图的圆点不伸出整组，也不压住整组的圆点） */
+const Knob = ({ onDown, inside }: { onDown: (e: React.PointerEvent) => void; inside?: boolean }) => (
+  <span onPointerDown={onDown} className={cn('absolute z-30 grid h-4.5 w-4.5 cursor-nwse-resize place-items-center rounded-full bg-popover shadow-pop', inside ? 'bottom-1.5 right-1.5' : '-bottom-2.25 -right-2.25')}><i className="h-1.5 w-1.5 rounded-full bg-primary" /></span>
 );
 
 export function StripFace({ b, H, fs, rtl, active, onPatch }: { b: Doc; H: number; fs: number; rtl: boolean; active: boolean; onPatch: (p: Doc) => void }) {
@@ -448,7 +449,7 @@ export function StripFace({ b, H, fs, rtl, active, onPatch }: { b: Doc; H: numbe
             onPointerDown={active ? (e) => start(e, (_dx, dy) => put(i, { offset: r2(clamp(o + dy / H, -0.5, 0.5)) })) : undefined}>
             <span className="relative block">
               <Img src={im.src} className="h-(--h) w-auto" style={{ '--h': px(H * s) }} />
-              {active && <Knob onDown={(e) => { const h0 = H * s; start(e, (_dx, dy) => put(i, { scale: r2(clamp((s * (h0 + dy)) / h0, 0.3, 1.6)) })); }} />}
+              {active && <Knob inside onDown={(e) => { const h0 = H * s; start(e, (_dx, dy) => put(i, { scale: r2(clamp((s * (h0 + dy)) / h0, 0.3, 1.6)) })); }} />}
             </span>
             <Cap text={im.caption} size={fs * 0.72} />
           </span>

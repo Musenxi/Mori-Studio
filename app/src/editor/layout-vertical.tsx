@@ -226,7 +226,7 @@ function VFace({ b, W, VH, fs, places, here, active, editing, onPatch }: { b: Do
       );
     }
     case 'strip':
-      return <div className="overflow-x-auto [scrollbar-width:none]"><StripFace b={b} H={W * 0.32} fs={fs} rtl={false} active={active} onPatch={onPatch} /></div>;
+      return <div className="overflow-x-auto overflow-y-hidden [scrollbar-width:none]"><StripFace b={b} H={W * 0.32} fs={fs} rtl={false} active={active} onPatch={onPatch} /></div>;
     case 'free':
       return <FreeFace b={b} h={W / (b.ar ?? 1.6)} fs={fs} active={active} onPatch={onPatch} />;
     case 'map':
