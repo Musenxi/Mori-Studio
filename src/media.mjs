@@ -105,7 +105,8 @@ async function stillTime(src) {
 }
 
 /**
- * 视频转成网页用的 mp4：H.264、最宽 1440、去掉声音、索引放在开头，写到 out。
+ * 视频转成网页用的 mp4：H.264、长边最多 1920（iPhone 实况视频的原尺寸，不缩）、crf 19，码率最高 14M（噪点很多的画面不至于太大）、
+ * 去掉声音、索引放在开头，写到 out。实况视频只有两三秒，文件大一点没关系；播放时会放大到照片的尺寸，压得太狠或缩得太小都会糊
  * 原有的元数据（含拍摄地点）全部去掉，只在注释里记静态照片的时间点（mori-photo-time=1.4667），主题读它交给 LivePhotosKit
  */
 export function toWebMp4(buffer, out) {
@@ -114,7 +115,7 @@ export function toWebMp4(buffer, out) {
     writeFileSync(src, buffer);
     try {
       const time = await stillTime(src);
-      await run('ffmpeg', ['-y', '-loglevel', 'error', '-i', src, '-map', '0:v:0', '-map_metadata', '-1', ...(time ? ['-metadata', `comment=mori-photo-time=${time}`] : []), '-vf', "scale='min(1440,iw)':-2", '-c:v', 'libx264', '-preset', 'slow', '-crf', '24', '-pix_fmt', 'yuv420p', '-an', '-movflags', '+faststart', tmp]);
+      await run('ffmpeg', ['-y', '-loglevel', 'error', '-i', src, '-map', '0:v:0', '-map_metadata', '-1', ...(time ? ['-metadata', `comment=mori-photo-time=${time}`] : []), '-vf', "scale='if(gte(iw,ih),min(1920,iw),-2)':'if(gte(iw,ih),-2,min(1920,ih))'", '-c:v', 'libx264', '-preset', 'slow', '-crf', '19', '-maxrate', '14M', '-bufsize', '28M', '-pix_fmt', 'yuv420p', '-an', '-movflags', '+faststart', tmp]);
     } catch (e) {
       if (e.code !== 'ENOENT') throw new Error('视频转换失败');
       if (process.platform !== 'darwin') throw new Error('需要先安装 ffmpeg 才能导入实况照片');
