@@ -3,23 +3,26 @@
  * 视图按横向读法把整篇排成一条：相邻的文字是一列，图片、图组、地图各是一块（见 flow.mjs 的 columns）。
  * 一项的 key 是它第一个块的 id。
  * 横滚和竖滚各存各的：块上的 h = { y, scale, gap, bleed, writing, align, pos }（横滚），v = { writing, align, pos }（竖滚）。
+ * 竖滚里单图还有 v = { x, bw, wrap }：左边、宽（页宽的比例，高按原图比例）、文字环绕（start 图在左 / end 图在右）。
  */
 import { columns, TEXT_BLOCKS, WRITING_BLOCKS } from 'astro-mori/flow';
 
 /** 横滚里的摆法：上下位置、缩放、和前一块的间距（标准间距的倍数）、图片满屏出血、浮起来的左右位置（屏高的倍数） */
 const PLACE_KEYS = ['y', 'scale', 'gap', 'bleed', 'x'];
 const place = (o) => Object.fromEntries(PLACE_KEYS.filter((k) => o[k] !== undefined).map((k) => [k, o[k]]));
+/** 竖滚里单图的摆法，项上叫 vx / vbw / vwrap（和文字一样） */
+const vplace = (b) => (b.type === 'image' ? Object.fromEntries([['vx', b.v?.x], ['vbw', b.v?.bw], ['vwrap', b.v?.wrap]].filter(([, v]) => v !== undefined)) : {});
 
 /**
  * 排版视图里的项，按顺序。每项：{ key, type, y?, scale?, ... }
  *   文字：type 'text'，writing 'h' | 'v'，blocks（列里的块）
  *   二级标题：type 'head'，blocks 只有它自己；lead 表示后面紧跟着一列文字（和它挨着排），没设的写法、对齐等跟着那列
- *   其余：就是那个块本身（加 key）
+ *   其余：就是那个块本身（加 key）；单图另有竖滚的 vx / vbw / vwrap
  */
 export function itemsOf(doc) {
   return columns(doc.blocks ?? []).map((c) => (c.kind === 'text'
     ? { key: c.blocks[0].id, type: c.head ? 'head' : 'text', writing: c.writing, vwriting: c.vwriting, align: c.align, valign: c.valign, pos: c.pos, vpos: c.vpos, fs: c.fs, lh: c.lh, bw: c.bw, bh: c.bh, vfs: c.vfs, vlh: c.vlh, vx: c.vx, vbw: c.vbw, vbh: c.vbh, ...place(c), ...(c.lead ? { lead: true } : {}), blocks: c.blocks }
-    : { ...c.block, key: c.block.id, ...place(c.block.h ?? {}) }));
+    : { ...c.block, key: c.block.id, ...place(c.block.h ?? {}), ...vplace(c.block) }));
 }
 
 export const isTextItem = (it) => it?.type === 'text' || it?.type === 'head';
@@ -74,13 +77,15 @@ export function setPlace(doc, key, patch, axis = 'h') {
     // 字号、行距、文本框的宽高：一列里每个文字块都写（和对齐一样）；竖滚里文本框的左右位置是 vx（写成 v.x）
     for (const k of ['fs', 'lh', 'bw', 'bh']) if (k in patch && text) put(o, axis, { [k]: patch[k] });
     if ('vx' in patch && text) put(o, 'v', { x: patch.vx });
+    // 竖滚里的单图：左边、宽、文字环绕
+    if (it.type === 'image' && axis === 'v') for (const [k, side] of [['vx', 'x'], ['bw', 'bw'], ['wrap', 'wrap']]) if (k in patch) put(o, 'v', { [side]: patch[k] });
     return o;
   }) };
 }
 
-/** 重置排版：去掉 axis 那一边所有的摆法（位置、大小、文本框宽高、间距、出血、浮动、字号、行距、对齐），横排竖排的写法留着 */
+/** 重置排版：去掉 axis 那一边所有的摆法（位置、大小、文本框宽高、间距、出血、浮动、字号、行距、对齐、环绕），横排竖排的写法留着 */
 export function resetLayout(doc, axis = 'h') {
-  const keys = axis === 'h' ? [...PLACE_KEYS, 'fs', 'lh', 'bw', 'bh', 'align', 'pos'] : ['x', 'bw', 'bh', 'fs', 'lh', 'align', 'pos'];
+  const keys = axis === 'h' ? [...PLACE_KEYS, 'fs', 'lh', 'bw', 'bh', 'align', 'pos'] : ['x', 'bw', 'bh', 'fs', 'lh', 'align', 'pos', 'wrap'];
   let changed = false;
   const blocks = (doc.blocks ?? []).map((b) => {
     if (!b[axis] || !keys.some((k) => k in b[axis])) return b;

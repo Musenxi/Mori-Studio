@@ -166,3 +166,14 @@ test('文本框宽高：bw / bh 写在当前读法那边，竖滚的左边位置
   assert.deepEqual([it.bw, it.bh, it.vx, it.vbw, it.vbh], [0.6, 0.4, 0.1, 0.7, undefined]);
   assert.equal(ops.resetLayout(ops.resetLayout(d, 'h'), 'v').blocks.find((b) => b.id === 'b01').v, undefined);
 });
+
+test('竖滚里的单图：左边、宽、环绕写在 v 里，项上是 vx / vbw / vwrap；重置竖滚时清掉，横滚的位置不动', () => {
+  let d = ops.setPlace(doc(), 's01', { vx: 0.1, bw: 0.4 }, 'v');
+  assert.deepEqual(d.blocks.find((b) => b.id === 's01').v, { x: 0.1, bw: 0.4 });
+  d = ops.setPlace(d, 's01', { wrap: 'end', vx: undefined }, 'v');
+  const it = ops.itemsOf(d).find((x) => x.key === 's01');
+  assert.deepEqual([it.vx, it.vbw, it.vwrap, it.y], [undefined, 0.4, 'end', 0.2]);
+  d = ops.resetLayout(d, 'v');
+  assert.equal(d.blocks.find((b) => b.id === 's01').v, undefined);
+  assert.deepEqual(d.blocks.find((b) => b.id === 's01').h, { y: 0.2 });
+});

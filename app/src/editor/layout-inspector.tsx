@@ -2,7 +2,7 @@
  * 排版视图右边的属性面板（InDesign 的“属性”面板）：选中什么就显示什么的设置，改了马上在版面上看到。
  *   没选中：整篇的结构，点一项选中它
  *   文字、标题：写法、对齐、位置；改字时多出段落样式和粗体斜体
- *   图片：版式、每张图的图注和替代文字、合并拆分
+ *   图片：版式、每张图的图注和替代文字、合并拆分；竖滚里单图的环绕、左边、宽
  */
 import type { ReactNode } from 'react';
 import { Bold, ImagePlus, Italic, Merge, Plus, RotateCcw, Split, Trash2, Type, X } from 'lucide-react';
@@ -94,6 +94,7 @@ function BlockPanel({ b }: { b: Doc }) {
       {b.type === 'map' && (
         <Section><Prop label="范围"><Segmented size="sm" value={b.scope ?? 'region'} onValueChange={(v) => patch({ scope: v })} options={[{ value: 'region', label: '所在区域' }, { value: 'route', label: '全程' }, { value: 'near', label: '这一处' }]} /></Prop></Section>
       )}
+      {axis === 'v' && b.type === 'image' && <VImageProps b={b} place={place} />}
       {ops.isImageBlock(b) && <ImageProps b={raw} patch={patch} typePatch={typePatch} />}
       {axis === 'h' && <PlaceProps b={b} raw={raw} place={place} />}
     </>
@@ -168,6 +169,18 @@ function BoxNum({ label, value, max, onChange }: { label: string; value?: number
         onChange={(v) => onChange(v === undefined || v <= 0 ? undefined : r2(Math.min(max, v) / 100))} />
       <span className="text-12 text-muted-foreground">%</span>
     </Prop>
+  );
+}
+
+/* ───────────── 竖滚里单图的摆法 ───────────── */
+
+function VImageProps({ b, place }: { b: Doc; place: (p: Doc) => void }) {
+  return (
+    <Section>
+      <Prop label="环绕"><Segmented size="sm" value={b.vwrap ?? 'none'} onValueChange={(v) => place({ wrap: v === 'none' ? undefined : v, ...(v === 'none' ? {} : { vx: undefined }) })} options={[{ value: 'none', label: '无' }, { value: 'start', label: '图在左' }, { value: 'end', label: '图在右' }]} /></Prop>
+      {!b.vwrap && <BoxNum label="左边" value={b.vx} max={100} onChange={(v) => place({ vx: v })} />}
+      <BoxNum label="宽" value={b.vbw} max={100} onChange={(v) => place({ bw: v })} />
+    </Section>
   );
 }
 
