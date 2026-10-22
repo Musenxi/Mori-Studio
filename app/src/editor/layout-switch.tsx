@@ -6,7 +6,7 @@
  * 看这篇文章的读法设置决定摆哪一种：只允许横向 → 横滚排版；只允许竖向 / 混合（或没设读法）→ 竖向排版；两边都允许 → 工具条上能切换。
  */
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Heading2, ImagePlus, Map as MapIcon, Pilcrow, Redo2, RotateCcw, Undo2 } from 'lucide-react';
+import { Heading2, ImagePlus, Map as MapIcon, Pilcrow, Redo2, RotateCcw, SeparatorVertical, Undo2 } from 'lucide-react';
 import { placesOf } from 'astro-mori/flow';
 import type { Doc } from '@/lib/types';
 import * as ops from '@/lib/layout-ops.js';
@@ -122,7 +122,8 @@ export function LayoutView({ doc, setDoc }: { doc: Doc; setDoc: (fn: (d: Doc) =>
   const remove = async (b: Doc) => {
     const text = ops.isTextItem(b);
     const what = b.type === 'text' ? '这段文字' : NAMES[b.type] ?? '这一块';
-    if (b.type !== 'map' && !(await confirm({ title: `删除${what}？`, description: text ? '文字会从正文里删掉。可以用 ⌘Z 撤销。' : '图片文件还在图库里。可以用 ⌘Z 撤销。', confirmLabel: '删除', danger: true }))) return;
+    const description = text ? '文字会从正文里删掉。可以用 ⌘Z 撤销。' : ops.isImageBlock(b) ? '图片文件还在图库里。可以用 ⌘Z 撤销。' : '可以用 ⌘Z 撤销。';
+    if (b.type !== 'map' && !(await confirm({ title: `删除${what}？`, description, confirmLabel: '删除', danger: true }))) return;
     commit(ops.removeItem(doc, b.key));
     setSel(null);
     stopEdit();
@@ -160,6 +161,7 @@ export function LayoutView({ doc, setDoc }: { doc: Doc; setDoc: (fn: (d: Doc) =>
           <ToolBtn label="文字" onClick={() => insert({ type: 'p', text: '', ...carry }, true)}><Pilcrow size={15} /></ToolBtn>
           <ToolBtn label="图片" onClick={() => pickImage((src) => insert({ type: 'image', src, alt: '', layout: 'inline' }))}><ImagePlus size={15} /></ToolBtn>
           <ToolBtn label="地图" onClick={() => insert({ type: 'map', scope: 'region' })}><MapIcon size={15} /></ToolBtn>
+          <ToolBtn label="幕间" onClick={() => insert({ type: 'interlude', ar: 1.6, items: [] })}><SeparatorVertical size={15} /></ToolBtn>
           <span className="ml-auto flex items-center gap-0.5">
             <Segmented size="sm" className="mr-1.5" value={zoom} onValueChange={setZoom} options={[{ value: 's', label: '小' }, { value: 'm', label: '中' }, { value: 'l', label: '大' }]} />
             <ToolBtn label="重置排版" onClick={() => void reset()}><RotateCcw size={15} /></ToolBtn>

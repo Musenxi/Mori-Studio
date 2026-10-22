@@ -7,7 +7,8 @@
  * 标题和后面那列文字挨着排：竖排（或右→左的手卷）标题在右，横排在左；标题没设上下位置就和文字顶端对齐。
  * 尺寸比例照着主题的横向读法（styles/travel.css）：视口高 S，图高 0.66S，版心上下让出 11% / 12%，
  * 文字框高 0.92 图高（短文字也从同一条线开始），满屏出血的图铺满 S。
- * 这个文件里还有两种读法共用的块的画法（图、图组、自由排布、地图、文字框）。
+ * 幕间把横卷分成几段：这里画成占满版心高度的一张画布（虚线框），上下不能挪，只能左右换位置；选中后在画布上摆里面的东西。
+ * 这个文件里还有两种读法共用的块的画法（图、图组、自由排布、地图、幕间、文字框）。
  */
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { MapPin } from 'lucide-react';
@@ -25,7 +26,7 @@ export type { PlaceInfo };
 export const clamp = (v: number, a: number, b: number) => Math.min(b, Math.max(a, v));
 export const r2 = (v: number) => Math.round(v * 100) / 100;
 export const px = (n: number) => `${n}px`;
-export const NAMES: Record<string, string> = { head: '标题', text: '文字', image: '单图', pair: '双图', strip: '图组', grid: '网格', free: '自由排布', map: '地图' };
+export const NAMES: Record<string, string> = { head: '标题', text: '文字', image: '单图', pair: '双图', strip: '图组', grid: '网格', free: '自由排布', map: '地图', interlude: '幕间' };
 /** 舞台占可用高度的比例：小一点能一眼看到更多 */
 export const ZOOMS: Record<string, number> = { s: 0.5, m: 0.72, l: 1 };
 export const ZOOM_KEY = 'mori-studio-layout-zoom';
@@ -148,7 +149,7 @@ export function HorizontalLayout() {
       removeEventListener('pointermove', move); removeEventListener('pointerup', up); cancelAnimationFrame(raf);
       setDrag(null);
       if (!moved) return;
-      let next = ops.setPlace(doc, b.key, { y: last.follow ? undefined : r2(last.y ?? y0), ...(floating ? { x: last.fx ?? fx0 } : {}) });
+      let next = b.type === 'interlude' ? doc : ops.setPlace(doc, b.key, { y: last.follow ? undefined : r2(last.y ?? y0), ...(floating ? { x: last.fx ?? fx0 } : {}) });
       if (reorder && last.slot !== undefined && last.slot !== null) next = ops.moveItem(next, b.key, last.slot);
       commit(next);
     };
@@ -247,7 +248,7 @@ export function HorizontalLayout() {
 
   const frame = (b: Doc, i: number, fixed = false, grouped = false) => (
     <BlockFrame key={b.key} b={b} g={g} seq={i} fixed={fixed} grouped={grouped} selected={sel === b.key} editing={editing} drag={drag?.key === b.key ? drag : null}
-      onDown={(e) => startMove(e, b)} onScale={(e) => startScale(e, b)} onBox={(e, w) => startBox(e, b, w)} onGap={grouped || b.x !== undefined ? undefined : (e) => startGap(e, b, b.gap ?? 1)} onOpen={(e) => { if (ops.isTextItem(b)) L.startEdit(b.key, { x: e.clientX, y: e.clientY }); }}>
+      onDown={(e) => startMove(e, b)} onScale={(e) => startScale(e, b)} onBox={(e, w) => startBox(e, b, w)} onGap={grouped || b.x !== undefined || b.type === 'interlude' ? undefined : (e) => startGap(e, b, b.gap ?? 1)} onOpen={(e) => { if (ops.isTextItem(b)) L.startEdit(b.key, { x: e.clientX, y: e.clientY }); }}>
       <Face b={drag && drag.key === b.key && (drag.bw !== undefined || drag.bh !== undefined) ? { ...b, bw: drag.bw, bh: drag.bh } : b} g={g} scale={drag?.key === b.key && drag?.scale !== undefined ? drag.scale : b.scale ?? 1}
         places={places} here={b.type === 'map' ? hereOf(blocks, b.key, places) : undefined}
         active={sel === b.key && !drag && !editing} editing={editing} onPatch={(p) => commit(ops.patchBlock(doc, b.key, p))} />
@@ -645,8 +646,53 @@ function Face({ b, g, scale, places, here, active, editing, onPatch }: { b: Doc;
       return <FreeFace b={b} h={H} fs={fs} active={active} onPatch={onPatch} />;
     case 'map':
       return <MiniMap places={places} here={b.scope === 'near' ? here : undefined} w={g.S * 0.78} h={g.S * 0.52} fs={fs} />;
+    case 'interlude':
+      return <InterludeFace b={b} w={g.S * 3} h={g.inner} active={active} onPatch={onPatch} />;
   }
   return <div className="text-muted-foreground">不认识的块</div>;
+}
+
+/* ───────────── 幕间 ───────────── */
+
+/**
+ * 幕间：一张画布（宽高比 ar，放进给的框里），上面随意摆的文字和图片，字号按画布宽缩放（和主题一样）。
+ * 选中后：拖动摆位置；右下角的圆点改宽（没给宽的文字是改字号）；双击文字改字
+ */
+export function InterludeFace({ b, w, h, active, onPatch }: { b: Doc; w: number; h: number; active: boolean; onPatch: (p: Doc) => void }) {
+  const { items, start } = useItemDrag<Doc>(b.items ?? [], (next) => onPatch({ items: next }));
+  const [typing, setTyping] = useState<number | null>(null);
+  const ar = b.ar ?? 1.6;
+  const W = Math.min(w, h * ar), H = W / ar, base = W * 0.017;
+  const put = (i: number, p: Doc) => items.map((x, k) => (k === i ? { ...x, ...p } : x));
+  const move = (e: React.PointerEvent, i: number) => { const it = items[i]; start(e, (dx, dy) => put(i, { x: r2(clamp(it.x + dx / W, 0, 0.98)), y: r2(clamp(it.y + dy / H, 0, 0.98)) })); };
+  const resize = (e: React.PointerEvent, i: number) => {
+    const it = items[i];
+    if (it.kind === 'text' && it.w === undefined) start(e, (dx, dy) => put(i, { size: r2(clamp((it.size ?? 1) * (1 + (it.writing === 'v' ? dy : dx) / (base * 10)), 0.5, 6)) }));
+    else start(e, (dx) => put(i, { w: r2(clamp((it.w ?? 0.3) + dx / W, 0.05, 1)) }));
+  };
+  return (
+    <div className={cn('serif relative h-(--h) w-(--w) outline outline-1 -outline-offset-1 outline-dashed outline-foreground/20', active && 'bg-foreground/[.03]')} style={{ '--w': px(W), '--h': px(H) }}>
+      {items.map((it, i) => {
+        const live = active && typing !== i;
+        const box = cn('absolute top-[calc(var(--y)*100%)] left-[calc(var(--x)*100%)] rotate-(--rot)', live && 'cursor-move outline outline-1 outline-offset-2 outline-foreground/20 hover:outline-foreground/50');
+        const pos = { '--x': it.x, '--y': it.y, '--rot': `${it.rot ?? 0}deg` };
+        const down = live ? (e: React.PointerEvent) => move(e, i) : undefined;
+        const knob = live && <Knob onDown={(e) => resize(e, i)} />;
+        if (it.kind === 'image') return <div key={i} className={cn(box, 'w-[calc(var(--iw)*100%)]')} style={{ ...pos, '--iw': it.w ?? 0.3 }} onPointerDown={down}><Img src={it.src} className="h-auto w-full" />{knob}</div>;
+        const v = it.writing === 'v';
+        return (
+          <p key={i} className={cn(box, 'text-(length:--fs) text-foreground', ALIGN[it.align as keyof typeof ALIGN], v ? 'max-h-[calc((1_-_var(--y))*100%)] leading-[2.05] tracking-[.14em] [writing-mode:vertical-rl]' : ['leading-[1.9] tracking-[.06em]', it.w !== undefined ? 'w-[calc(var(--tw)*100%)]' : 'w-max max-w-[calc((1_-_var(--x))*100%)]'])}
+            style={{ ...pos, '--fs': px(base * (it.size ?? 1)), '--tw': it.w }} onPointerDown={down}
+            onDoubleClick={active ? (e) => { e.stopPropagation(); setTyping(i); } : undefined}>
+            {typing === i
+              ? <TextBox value={it.text} h={!v} onDone={(text) => { setTyping(null); if (text !== undefined) onPatch({ items: items.map((x, k) => (k === i ? { ...x, text } : x)) }); }} />
+              : asSpans(it.text).length ? <Spans text={it.text} /> : active && <span className="text-muted-foreground/60">文字</span>}
+            {knob}
+          </p>
+        );
+      })}
+    </div>
+  );
 }
 
 /** 地图块的示意：地点连线。真正的地图在预览里看 */

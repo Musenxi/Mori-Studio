@@ -148,14 +148,14 @@ export function fromMarkdown(text, doc, folder = '') {
     e.slots.push({ o, n });
   });
 
-  // 二：文本里没有内容的旧块（地图，只剩小段文字的自由排布……）跟在它原来前一个块的后面
+  // 二：文本里没有内容的旧块（地图、幕间，只剩小段文字的自由排布……）跟在它原来前一个块的后面
   const hasItems = new Set(oldItems.map((it) => it.block));
   const placed = new Map(entries.filter((e) => e.old).map((e) => [e.old.id, e]));
   oldBlocks.forEach((b, i) => {
     if (placed.has(b.id)) return;
     // 文本里的内容被删光了：整块删掉；只有自由排布里的小段文字不在文本里，留着
     if (hasItems.has(b.id) && !(b.type === 'free' && b.items.some((it) => it.kind === 'text'))) return;
-    if (!hasItems.has(b.id) && !['map', 'free'].includes(b.type)) return; // 空的文字块之类：没有内容，不留
+    if (!hasItems.has(b.id) && !['map', 'free', 'interlude'].includes(b.type)) return; // 空的文字块之类：没有内容，不留
     const e = { old: b, nb: null, slots: [] };
     let at = 0;
     for (let k = i - 1; k >= 0; k--) { const p = placed.get(oldBlocks[k].id); if (p) { at = entries.indexOf(p) + 1; break; } }

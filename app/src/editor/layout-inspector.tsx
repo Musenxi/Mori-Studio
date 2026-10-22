@@ -3,6 +3,7 @@
  *   没选中：整篇的结构，点一项选中它
  *   文字、标题：写法、对齐、位置；改字时多出段落样式和粗体斜体
  *   图片：版式、每张图的图注和替代文字、合并拆分；竖滚里单图的环绕、左边、宽
+ *   幕间：画布比例，上面每样东西（文字、图片）的内容和角度
  */
 import type { ReactNode } from 'react';
 import { Bold, ImagePlus, Italic, Merge, Plus, RotateCcw, Split, Trash2, Type, X } from 'lucide-react';
@@ -43,6 +44,7 @@ const Section = ({ children, className }: { children: ReactNode; className?: str
 function labelOf(b: Doc) {
   if (ops.isTextItem(b)) return (b.blocks ?? []).map(blockPlain).join(' ').trim().slice(0, 40);
   if (b.type === 'map') return '';
+  if (b.type === 'interlude') return (b.items ?? []).filter((it: Doc) => it.kind === 'text').map((it: Doc) => blockPlain({ type: 'p', text: it.text })).join(' ').slice(0, 40);
   const ims = ops.imagesOf(b);
   return ims.map((i: Doc) => i.caption).filter(Boolean).join(' / ') || (ims.length > 1 ? `${ims.length} 张` : baseName(assetOf(ims[0]?.src)));
 }
@@ -96,7 +98,8 @@ function BlockPanel({ b }: { b: Doc }) {
       )}
       {axis === 'v' && b.type === 'image' && <VImageProps b={b} place={place} />}
       {ops.isImageBlock(b) && <ImageProps b={raw} patch={patch} typePatch={typePatch} />}
-      {axis === 'h' && <PlaceProps b={b} raw={raw} place={place} />}
+      {b.type === 'interlude' && <InterludeProps b={raw} patch={patch} typePatch={typePatch} />}
+      {axis === 'h' && b.type !== 'interlude' && <PlaceProps b={b} raw={raw} place={place} />}
     </>
   );
 }
@@ -234,6 +237,61 @@ function PlaceProps({ b, raw, place }: { b: Doc; raw: Doc; place: (p: Doc) => vo
         </Prop>
       )}
     </Section>
+  );
+}
+
+/* ───────────── 幕间 ───────────── */
+
+/** 去掉值是 undefined 的字段 */
+const clean = (o: Doc) => Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined));
+const ITEM_NAMES: Record<string, string> = { text: '文字', image: '图片' };
+
+/** 幕间：画布的宽高比；上面每样东西一块（文字、图片），各自能转角度、能去掉；新加的摆在画布左上一带，错开一点 */
+function InterludeProps({ b, patch, typePatch }: { b: Doc; patch: (p: Doc) => void; typePatch: (p: Doc) => void }) {
+  const L = useLayout();
+  const items: Doc[] = b.items ?? [];
+  const at = (i: number, p: Doc) => items.map((x, k) => (k === i ? clean({ ...x, ...p }) : x));
+  const n = items.length, spot = { x: r2(0.08 + (n % 4) * 0.18), y: r2(0.1 + (n % 3) * 0.24) };
+  const add = (it: Doc) => patch({ items: [...items, { ...spot, ...it }] });
+  return (
+    <>
+      <Section><Prop label="比例"><NumInput className="h-8 w-24" min={0.5} step={0.1} value={b.ar ?? 1.6} onChange={(v) => v && v >= 0.5 && patch({ ar: v })} /></Prop></Section>
+      <Section className="space-y-2">
+        {items.map((it, i) => (
+          <div key={`${i}/${n}`} className="space-y-1.5 rounded-lg bg-foreground/[.04] p-2">
+            <div className="flex items-center gap-1.5">
+              <span className="text-12 text-muted-foreground">{ITEM_NAMES[it.kind]}</span>
+              <span className="ml-auto text-12 text-muted-foreground">旋转</span>
+              <NumInput className="h-7 w-16" step={1} value={it.rot ?? 0} onChange={(v) => patch({ items: at(i, { rot: v ? Math.max(-180, Math.min(180, v)) : undefined }) })} />
+              <button type="button" aria-label="移除" onClick={() => patch({ items: items.filter((_, k) => k !== i) })} className="grid h-6 w-6 shrink-0 place-items-center rounded-full text-muted-foreground hover:bg-foreground/[.06] hover:text-destructive"><X size={13} /></button>
+            </div>
+            {it.kind === 'text' && (
+              <>
+                <InlineField rows={2} value={it.text} placeholder="文字" onChange={(v) => typePatch({ items: at(i, { text: v }) })} />
+                <div className="flex items-center gap-1.5">
+                  <Segmented size="sm" value={it.writing === 'v' ? 'v' : 'h'} onValueChange={(v) => patch({ items: at(i, { writing: v, ...(v === 'v' ? { w: undefined } : {}) }) })} options={[{ value: 'h', label: '横排' }, { value: 'v', label: '竖排' }]} />
+                  <span className="ml-auto text-12 text-muted-foreground">字号</span>
+                  <NumInput className="h-7 w-16" min={50} max={600} step={10} value={Math.round((it.size ?? 1) * 100)} onChange={(v) => patch({ items: at(i, { size: v === undefined || v === 100 ? undefined : r2(Math.min(600, Math.max(50, v)) / 100) }) })} />
+                </div>
+              </>
+            )}
+            {it.kind === 'image' && (
+              <div className="flex gap-2.5">
+                <Thumb src={it.src} onClick={() => L.pickImage((src) => patch({ items: at(i, { src }) }))} />
+                <div className="min-w-0 flex-1 space-y-1.5">
+                  <Input className="h-8" placeholder="图注" value={it.caption ?? ''} onChange={(e) => typePatch({ items: at(i, { caption: e.target.value || undefined }) })} />
+                  <Input className="h-8" placeholder="替代文字" value={it.alt ?? ''} onChange={(e) => typePatch({ items: at(i, { alt: e.target.value }) })} />
+                </div>
+              </div>
+            )}
+          </div>
+        ))}
+        <div className="flex gap-1">
+          <Button size="sm" variant="ghost" className="-ml-3" onClick={() => add({ kind: 'text', text: '', w: 0.3, writing: 'h' })}><Plus size={13} />文字</Button>
+          <Button size="sm" variant="ghost" onClick={() => L.pickImage((src) => add({ kind: 'image', src, alt: '', w: 0.24 }))}><Plus size={13} />图片</Button>
+        </div>
+      </Section>
+    </>
   );
 }
 

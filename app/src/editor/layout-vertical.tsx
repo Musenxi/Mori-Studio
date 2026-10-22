@@ -1,6 +1,7 @@
 /**
  * 竖向读法的版面：整篇是一页往下读的长页，照着主题里竖向读法的版式摆（styles/travel.css 的 v / m）——
- *   文字居中成一栏，单图通栏或内缩，双图并排，网格一大几小，图组是一行可横拖的图，自由排布保持比例，地图一整块。
+ *   文字居中成一栏，单图通栏或内缩，双图并排，网格一大几小，图组是一行可横拖的图，自由排布保持比例，地图一整块，
+ *   幕间是整页宽的一屏停顿。
  *   标题和后面那列文字摞在一起（两边都竖排时并排，标题在右）。
  *   上下拖动 → 换顺序（竖向读法里没有“上下位置”和“大小”，那是横滚才有的）
  *   文本框：左右拖 → 放在页面的哪里（x，页宽的比例，靠左 / 居中 / 靠右和原来的栏位会吸住）；
@@ -14,7 +15,7 @@ import { cn } from '@/lib/cn';
 import type { Doc } from '@/lib/types';
 import * as ops from '@/lib/layout-ops.js';
 import { useLayout, type PlaceInfo } from './layout-ctx';
-import { BoxHandles, Cap, FreeFace, hereOf, Img, MiniMap, StripFace, TextFace, VPOS, clamp, px, r2, rowsOf } from './layout-view';
+import { BoxHandles, Cap, FreeFace, hereOf, Img, InterludeFace, MiniMap, StripFace, TextFace, VPOS, clamp, px, r2, rowsOf } from './layout-view';
 
 interface Drag { key: string; dy?: number; slot?: number; line?: number; vx?: number; bw?: number; bh?: number; guide?: number; side?: 'start' | 'end'; into?: { key: string; side: 'start' | 'end'; rect: [number, number, number, number] } }
 /** 竖滚里单图环绕时默认的宽（页宽的比例），和主题一样 */
@@ -320,6 +321,8 @@ function VFace({ b, W, VH, fs, places, here, active, editing, onPatch }: { b: Do
       return <FreeFace b={b} h={W / (b.ar ?? 1.6)} fs={fs} active={active} onPatch={onPatch} />;
     case 'map':
       return <MiniMap places={places} here={b.scope === 'near' ? here : undefined} w={W * 0.83} h={W * 0.45} fs={fs} />;
+    case 'interlude':
+      return <InterludeFace b={b} w={W} h={VH} active={active} onPatch={onPatch} />;
   }
   return <div className="text-muted-foreground">不认识的块</div>;
 }

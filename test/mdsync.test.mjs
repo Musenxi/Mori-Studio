@@ -264,3 +264,13 @@ test('不写地名的地点：[](geo:…) 单独一行或夹在文字里，不�
   assert.match(md, /^\[\]\(geo:35,135\.7\?en=Spot\)$/m);
   assert.deepEqual(fromMarkdown(md, d).blocks, d.blocks);
 });
+
+test('幕间不在文本里：改了前面的字也留在原来的位置', () => {
+  const d = doc();
+  d.blocks.splice(2, 0, { id: 'i01', type: 'interlude', ar: 1.6, items: [{ kind: 'text', text: [{ t: '途中' }], x: 0.1, y: 0.1 }] });
+  const md = toMarkdown(d);
+  assert.doesNotMatch(md, /途中/);
+  const back = fromMarkdown(md.replace('小节', '小节二'), d);
+  assert.deepEqual(back.blocks.map((b) => b.id), ['b01', 'b02', 'i01', 'b03', 'b04', 'b05']);
+  assert.deepEqual(back.blocks[2], d.blocks[2]);
+});
