@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
-import { Bold, Code, CodeXml, EyeOff, Heading2, Heading3, ImageIcon, Info, Italic, Lightbulb, Link2, List, MapPin, Asterisk, MessageSquareQuote, MessageSquareWarning, OctagonAlert, Quote, Sigma, SquareSigma, TriangleAlert } from 'lucide-react';
+import { Bold, Code, CodeXml, EyeOff, Film, Heading2, Heading3, ImageIcon, Info, Italic, Lightbulb, Link2, List, MapPin, Asterisk, MessageSquareQuote, MessageSquareWarning, OctagonAlert, Quote, Sigma, SquareSigma, TriangleAlert } from 'lucide-react';
 import { Menu, MenuItem, MenuTrigger } from '@/components/action-menu';
 import { DropdownMenuContent } from '@/components/ui/dropdown-menu';
 import { parsePlaceHref, placeHref, placesOf } from 'astro-mori/flow';
@@ -14,6 +14,7 @@ import { Tip } from '@/components/tip';
 import { EmojiPicker } from '@/components/emoji-picker';
 import { createEditor, type CalloutKind, type MdCommand, type MdEditor, type PlaceTarget } from './cm';
 import { PlaceDialog, type PlaceForm } from './place-fields';
+import { useVideoUpload } from './video-upload';
 
 const CALLOUTS: Array<{ kind: CalloutKind; label: string; icon: typeof Bold }> = [
   { kind: 'note', label: '说明', icon: Info },
@@ -23,7 +24,7 @@ const CALLOUTS: Array<{ kind: CalloutKind; label: string; icon: typeof Bold }> =
   { kind: 'caution', label: '警告', icon: OctagonAlert },
 ];
 
-const TOOLS: Array<{ cmd: MdCommand | 'callout' | 'image' | 'note' | 'fn' | 'place'; label: string; icon: typeof Bold; key?: string; gap?: boolean }> = [
+const TOOLS: Array<{ cmd: MdCommand | 'callout' | 'image' | 'video' | 'note' | 'fn' | 'place'; label: string; icon: typeof Bold; key?: string; gap?: boolean }> = [
   { cmd: 'bold', label: '粗体', icon: Bold, key: '⌘B' },
   { cmd: 'italic', label: '斜体', icon: Italic, key: '⌘I' },
   { cmd: 'link', label: '链接', icon: Link2, key: '⌘K' },
@@ -38,6 +39,7 @@ const TOOLS: Array<{ cmd: MdCommand | 'callout' | 'image' | 'note' | 'fn' | 'pla
   { cmd: 'mathBlock', label: '公式块', icon: SquareSigma },
   { cmd: 'callout', label: '提示框', icon: MessageSquareWarning },
   { cmd: 'image', label: '插入图片', icon: ImageIcon, gap: true },
+  { cmd: 'video', label: '插入视频', icon: Film },
   { cmd: 'note', label: '旁注', icon: MessageSquareQuote },
   { cmd: 'fn', label: '脚注', icon: Asterisk },
   { cmd: 'place', label: '地点', icon: MapPin },
@@ -85,6 +87,7 @@ export function MarkdownView({ doc, setDoc }: { doc: Doc; setDoc: (fn: (d: Doc) 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [doc.blocks]);
 
+  const pickVideo = useVideoUpload();
   const openPin = () => {
     const target = ed.current!.placeTarget();
     const m = target.href ? parsePlaceHref(target.href) : null;
@@ -92,6 +95,7 @@ export function MarkdownView({ doc, setDoc }: { doc: Doc; setDoc: (fn: (d: Doc) 
   };
   const run = (cmd: (typeof TOOLS)[number]['cmd']) => {
     if (cmd === 'image') setLib(true);
+    else if (cmd === 'video') pickVideo((r) => { ed.current?.insertBlock(`![](${mdImagePath(r.path, folder)})`); ed.current?.focus(); });
     else if (cmd === 'note' || cmd === 'fn') ed.current?.addNote(cmd);
     else if (cmd === 'place') openPin();
     else if (cmd !== 'callout') ed.current?.run(cmd);

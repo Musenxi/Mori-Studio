@@ -16,10 +16,10 @@ import { validateEntry } from 'astro-mori/validate';
 import { locate } from 'astro-mori/anchor';
 import { probeSite } from './probe.mjs';
 import { gitInfo, gitInit, publishGit, publishLocal } from './publish.mjs';
-import { HEIC_EXT, heicToJpeg, uprightJpeg, stripLocation, toWebMp4 } from './media.mjs';
-import { hostReady, pendingAssets, syncToHost, testHost } from './cdn.mjs';
+import { HEIC_EXT, heicToJpeg, uprightJpeg, stripLocation, toWebMp4, toWebVideo } from './media.mjs';
+import { hostReady, pendingAssets, pendingVideos, syncToHost, testHost } from './cdn.mjs';
 import { listEmoji, createPack, saveEmoji, renamePack, renameEmoji, trashEmoji } from './emoji.mjs';
-import { listAssets, saveAsset, liveVideo, assetUsage, trashAsset, moveAssets, mergeAssets, indexAssets, rememberOrigin, findSame, similarGroups, sha256, cleanRel, SHARED } from './library.mjs';
+import { listAssets, saveAsset, liveVideo, assetUsage, trashAsset, moveAssets, mergeAssets, indexAssets, rememberOrigin, findSame, similarGroups, sha256, cleanRel, SHARED, VIDEO_EXT, videoNames, withVideoPosters } from './library.mjs';
 import { parseGpx, simplify, readExif, clusterStops } from './geo.mjs';
 import { commentsClient } from './comments.mjs';
 import { keychain, commentsAccount, imageHostAccount } from './secrets.mjs';
@@ -203,7 +203,7 @@ export async function startStudio({ root, port = 4400, dev = false }) {
     const host = imageHost();
     if (!hostReady(host)) return;
     write('▸ 同步图床\n');
-    try { const n = await syncToHost(root, host, (t) => write(`  ${t}`)); write(n ? `上传了 ${n} 张\n\n` : '没有要上传的\n\n'); } catch (e) { write(`同步图床失败：${e.message}\n没上传的图这次用本地的。\n\n`); }
+    try { const n = await syncToHost(root, host, (t) => write(`  ${t}`)); write(n ? `上传了 ${n} 个文件\n\n` : '没有要上传的\n\n'); } catch (e) { write(`同步图床失败：${e.message}\n没上传的图这次用本地的。\n\n`); }
   }
 
   /** 换一个 --root 把自己重新启动一遍（同一个端口）：切换站点、更新主题之后都要这样，Studio 的主题模块和界面是启动时才载入的 */
@@ -558,7 +558,7 @@ export async function startStudio({ root, port = 4400, dev = false }) {
         if (!isId(id)) return send(res, 400, { error: 'id 只能用字母、数字、下划线和连字符' });
         if (req.method === 'GET') return entryExists(root, kind, id) ? send(res, 200, readEntry(root, kind, id)) : send(res, 404, { error: '没有这篇' });
         if (req.method === 'PUT') {
-          const data = await readJson(req);
+          const data = withVideoPosters(root, await readJson(req));
           const v = validateEntry(kind, data);
           // 校验不通过也允许保存草稿（写作过程中难免不完整），但把问题原样返回；`?strict=1` 时拒绝
           if (!v.ok && url.searchParams.get('strict')) return send(res, 422, v);
@@ -659,6 +659,20 @@ export async function startStudio({ root, port = 4400, dev = false }) {
         try { await toWebMp4(body, liveVideo(root, rel)); } catch (e) { return send(res, 400, { error: e.message }); }
         return send(res, 200, { ok: true });
       }
+      // 视频（正文里的视频块）：转成网页用的 mp4（留着声音），取一帧当封面，存成 <名字>.mp4 + <名字>.poster.jpg
+      if (req.method === 'PUT' && p === '/api/assets/video') {
+        let folder;
+        try { folder = cleanRel(url.searchParams.get('folder') ?? SHARED, { folder: true }); } catch (e) { return send(res, 400, { error: e.message }); }
+        const name = url.searchParams.get('name') ?? 'video.mp4';
+        if (!VIDEO_EXT.has(extname(name).toLowerCase())) return send(res, 400, { error: '只接受视频文件' });
+        let body;
+        try { body = await readBody(req, 1024 * 1024 * 1024); } catch (e) { return send(res, 400, { error: e.message }); }
+        const { video, poster } = videoNames(root, folder, name);
+        const at = (rel) => join(root, 'src/assets', rel);
+        mkdirSync(dirname(at(video)), { recursive: true });
+        try { await toWebVideo(body, at(video), at(poster)); } catch (e) { return send(res, 400, { error: e.message }); }
+        return send(res, 200, { ok: true, path: video, ...(existsSync(at(poster)) ? { poster } : {}) });
+      }
       if (req.method === 'POST' && p === '/api/assets/move') {
         try {
           const { paths, folder } = await readJson(req);
@@ -677,7 +691,7 @@ export async function startStudio({ root, port = 4400, dev = false }) {
       if (req.method === 'GET' && p === '/api/image-host') {
         const h = imageHost();
         const { secretAccessKey, ...rest } = h ?? {};
-        return send(res, 200, { host: h ? { ...rest, hasSecret: !!secretAccessKey } : null, ready: hostReady(h), pending: hostReady(h) ? (await pendingAssets(root, h)).length : 0 });
+        return send(res, 200, { host: h ? { ...rest, hasSecret: !!secretAccessKey } : null, ready: hostReady(h), pending: hostReady(h) ? (await pendingAssets(root, h)).length + pendingVideos(root, h).length : 0 });
       }
       if (req.method === 'PUT' && p === '/api/image-host') {
         try {
@@ -703,7 +717,7 @@ export async function startStudio({ root, port = 4400, dev = false }) {
       }
       if (req.method === 'POST' && p === '/api/image-host/sync') {
         res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' });
-        try { const n = await syncToHost(root, imageHost(), (t) => res.write(t)); return res.end(`${n ? `上传了 ${n} 张` : '没有要上传的'}\n[exit 0]\n`); } catch (e) { return res.end(`${e.message}\n[exit 1]\n`); }
+        try { const n = await syncToHost(root, imageHost(), (t) => res.write(t)); return res.end(`${n ? `上传了 ${n} 个文件` : '没有要上传的'}\n[exit 0]\n`); } catch (e) { return res.end(`${e.message}\n[exit 1]\n`); }
       }
 
       /* ── 预览：项目自己的 Astro 渲染（见 preview.mjs）。界面开着预览时会定期调 start，算“还在用” ── */

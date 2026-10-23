@@ -6,7 +6,7 @@
  * 看这篇文章的读法设置决定摆哪一种：只允许横向 → 横滚排版；只允许竖向 / 混合（或没设读法）→ 竖向排版；两边都允许 → 工具条上能切换。
  */
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Heading2, ImagePlus, Map as MapIcon, Pilcrow, Redo2, RotateCcw, SeparatorVertical, Undo2 } from 'lucide-react';
+import { Film, Heading2, ImagePlus, Map as MapIcon, Pilcrow, Redo2, RotateCcw, SeparatorVertical, Undo2 } from 'lucide-react';
 import { placesOf } from 'astro-mori/flow';
 import type { Doc } from '@/lib/types';
 import * as ops from '@/lib/layout-ops.js';
@@ -21,6 +21,7 @@ import { caretAtPoint, placeCaret, readSel, unitOf, type Caret, type EditApi } f
 import { HorizontalLayout, NAMES, ToolBtn, ZOOM_KEY } from './layout-view';
 import { VerticalLayout } from './layout-vertical';
 import { Inspector } from './layout-inspector';
+import { useVideoUpload } from './video-upload';
 
 type Axis = 'v' | 'h';
 
@@ -117,6 +118,7 @@ export function LayoutView({ doc, setDoc }: { doc: Doc; setDoc: (fn: (d: Doc) =>
   };
 
   const [lib, setLib] = useState<((src: string) => void) | null>(null);
+  const pickVideo = useVideoUpload();
   const pickImage = useCallback((fn: (src: string) => void) => setLib(() => fn), []);
 
   const remove = async (b: Doc) => {
@@ -160,6 +162,7 @@ export function LayoutView({ doc, setDoc }: { doc: Doc; setDoc: (fn: (d: Doc) =>
           <ToolBtn label="标题" onClick={() => insert({ type: 'h', level: 2, text: '' }, true)}><Heading2 size={15} /></ToolBtn>
           <ToolBtn label="文字" onClick={() => insert({ type: 'p', text: '', ...carry }, true)}><Pilcrow size={15} /></ToolBtn>
           <ToolBtn label="图片" onClick={() => pickImage((src) => insert({ type: 'image', src, alt: '', layout: 'inline' }))}><ImagePlus size={15} /></ToolBtn>
+          <ToolBtn label="视频" onClick={() => pickVideo((r) => insert({ type: 'video', src: `../../assets/${r.path}`, ...(r.poster ? { poster: `../../assets/${r.poster}` } : {}), alt: '', layout: 'inline' }))}><Film size={15} /></ToolBtn>
           <ToolBtn label="地图" onClick={() => insert({ type: 'map', scope: 'region' })}><MapIcon size={15} /></ToolBtn>
           <ToolBtn label="幕间" onClick={() => insert({ type: 'interlude', ar: 1.6, items: [] })}><SeparatorVertical size={15} /></ToolBtn>
           <span className="ml-auto flex items-center gap-0.5">

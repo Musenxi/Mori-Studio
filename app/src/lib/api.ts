@@ -118,6 +118,13 @@ export const api = {
     if (!r.ok) throw new ApiError(j.error ?? '上传失败', r.status);
     return j as { ok: true; path: string; dup: boolean };
   },
+  /** 上传一段视频（正文里的视频块）到某个文件夹：服务端转成网页用的 mp4、取一帧当封面。返回视频和封面的路径 */
+  uploadVideo: async (file: File, folder: string) => {
+    const r = await fetch(`/api/assets/video?folder=${encodeURIComponent(folder)}&name=${encodeURIComponent(file.name)}`, { method: 'PUT', body: file });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new ApiError(j.error ?? '上传失败', r.status);
+    return j as { ok: true; path: string; poster?: string };
+  },
   /** 上传一批文件：图片（HEIC 在服务端转成 JPEG）；和图片同名的 .mov / .mp4 是实况照片的视频，跟着那张图片传。stripLocation：存之前清掉 GPS。返回存下（或认出已有）的图片路径 */
   uploadImages: async (files: File[], folder: string, stripLocation = false) => {
     const videos = new Map(files.filter(isVideoFile).map((f) => [stemOf(f.name), f]));
@@ -192,6 +199,8 @@ const extOf = (n: string) => n.slice(n.lastIndexOf('.')).toLowerCase();
 const stemOf = (n: string) => n.slice(0, n.lastIndexOf('.')).toLowerCase();
 export const isImageFile = (f: File) => f.type.startsWith('image/') || ['.heic', '.heif'].includes(extOf(f.name));
 export const isVideoFile = (f: File) => ['.mov', '.mp4'].includes(extOf(f.name));
+/** 插入视频时能选的文件 */
+export const VIDEO_ACCEPT = 'video/mp4,video/quicktime,video/x-m4v,video/webm,.mp4,.mov,.m4v,.webm';
 /** 文件选择框接受的类型：图片、HEIC、实况照片的视频 */
 export const IMAGE_ACCEPT = 'image/*,.heic,.heif,.mov,.mp4';
 export const assetUrl = (path: string, w = 240) => `/asset/${path.split('/').map(encodeURIComponent).join('/')}?w=${w}`;

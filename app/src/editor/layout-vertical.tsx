@@ -15,7 +15,7 @@ import { cn } from '@/lib/cn';
 import type { Doc } from '@/lib/types';
 import * as ops from '@/lib/layout-ops.js';
 import { useLayout, type PlaceInfo } from './layout-ctx';
-import { BoxHandles, Cap, FreeFace, hereOf, Img, InterludeFace, MiniMap, StripFace, TextFace, VPOS, clamp, px, r2, rowsOf } from './layout-view';
+import { BoxHandles, Cap, FreeFace, hereOf, Img, InterludeFace, MiniMap, PlayMark, posterOf, StripFace, TextFace, VPOS, clamp, px, r2, rowsOf } from './layout-view';
 
 interface Drag { key: string; dy?: number; slot?: number; line?: number; vx?: number; bw?: number; bh?: number; guide?: number; side?: 'start' | 'end'; into?: { key: string; side: 'start' | 'end'; rect: [number, number, number, number] } }
 /** 竖滚里单图环绕时默认的宽（页宽的比例），和主题一样 */
@@ -260,7 +260,7 @@ export function VerticalLayout() {
 function widthOf(b: Doc): number {
   switch (b.type) {
     case 'text': case 'head': return b.vwriting === 'v' ? 0.67 : 0.56;
-    case 'image': return b.layout === 'inline' ? 0.67 : 1;
+    case 'image': case 'video': return b.layout === 'inline' ? 0.67 : 1;
     case 'pair': return 0.83;
     case 'map': return 0.83;
     default: return 1;
@@ -303,6 +303,8 @@ function VFace({ b, W, VH, fs, places, here, active, editing, onPatch }: { b: Do
     }
     case 'image':
       return <figure><Img src={b.src} className="h-auto w-full" />{cap(b.caption)}</figure>;
+    case 'video':
+      return <figure><span className="relative block"><Img src={posterOf(b)} className="h-auto w-full" /><PlayMark /></span>{cap(b.caption)}</figure>;
     case 'pair':
       return <figure><div className="grid grid-cols-2 gap-(--g)" style={{ '--g': px(W * 0.012) }}>{b.images.map((im: Doc, i: number) => <figure key={i}><Img src={im.src} className="aspect-[4/3] w-full" />{cap(im.caption)}</figure>)}</div></figure>;
     case 'grid': {

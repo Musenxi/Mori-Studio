@@ -1,10 +1,10 @@
 /**
  * 导入时的格式转换：HEIC → JPEG（浏览器和 sharp 都读不了 iPhone 的 HEIC），
- * 实况照片的视频 → H.264 的 mp4（iPhone 录的是 HEVC，很多浏览器放不了）。
+ * 实况照片的视频、正文里的视频 → H.264 的 mp4（iPhone 录的是 HEVC，很多浏览器放不了）。
  * HEIC 用 macOS 自带的 sips；视频优先用 ffmpeg，没有就用 macOS 自带的 avconvert。
  */
 import { execFile } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync, copyFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync, copyFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
@@ -104,6 +104,9 @@ async function stillTime(src) {
   } catch { return undefined; }
 }
 
+/** 长边最多 1920（iPhone 视频的原尺寸，不缩），另一边按比例取偶数 */
+const SCALE = "scale='if(gte(iw,ih),min(1920,iw),-2)':'if(gte(iw,ih),-2,min(1920,ih))'";
+
 /**
  * 视频转成网页用的 mp4：H.264、长边最多 1920（iPhone 实况视频的原尺寸，不缩）、crf 19，码率最高 14M（噪点很多的画面不至于太大）、
  * 去掉声音、索引放在开头，写到 out。实况视频只有两三秒，文件大一点没关系；播放时会放大到照片的尺寸，压得太狠或缩得太小都会糊
@@ -115,12 +118,34 @@ export function toWebMp4(buffer, out) {
     writeFileSync(src, buffer);
     try {
       const time = await stillTime(src);
-      await run('ffmpeg', ['-y', '-loglevel', 'error', '-i', src, '-map', '0:v:0', '-map_metadata', '-1', ...(time ? ['-metadata', `comment=mori-photo-time=${time}`] : []), '-vf', "scale='if(gte(iw,ih),min(1920,iw),-2)':'if(gte(iw,ih),-2,min(1920,ih))'", '-c:v', 'libx264', '-preset', 'slow', '-crf', '19', '-maxrate', '14M', '-bufsize', '28M', '-pix_fmt', 'yuv420p', '-an', '-movflags', '+faststart', tmp]);
+      await run('ffmpeg', ['-y', '-loglevel', 'error', '-i', src, '-map', '0:v:0', '-map_metadata', '-1', ...(time ? ['-metadata', `comment=mori-photo-time=${time}`] : []), '-vf', SCALE, '-c:v', 'libx264', '-preset', 'slow', '-crf', '19', '-maxrate', '14M', '-bufsize', '28M', '-pix_fmt', 'yuv420p', '-an', '-movflags', '+faststart', tmp]);
     } catch (e) {
       if (e.code !== 'ENOENT') throw new Error('视频转换失败');
       if (process.platform !== 'darwin') throw new Error('需要先安装 ffmpeg 才能导入实况照片');
       try { await run('avconvert', ['--source', src, '--output', tmp, '--preset', 'Preset1920x1080', '--replace']); } catch { throw new Error('视频转换失败'); }
     }
     copyFileSync(tmp, out);
+  });
+}
+
+/**
+ * 正文里的视频：转成网页用的 mp4（H.264、长边最多 1920、留着声音转成 AAC、去掉元数据，索引放在开头），写到 out；
+ * 再从转好的视频里取一帧（0.3 秒处，太短就取第一帧）存成 JPEG 封面，写到 poster
+ */
+export function toWebVideo(buffer, out, poster) {
+  return scratch(async (dir) => {
+    const src = join(dir, 'in'), tmp = join(dir, 'out.mp4'), jpg = join(dir, 'poster.jpg');
+    writeFileSync(src, buffer);
+    try {
+      await run('ffmpeg', ['-y', '-loglevel', 'error', '-i', src, '-map', '0:v:0', '-map', '0:a:0?', '-map_metadata', '-1', '-vf', SCALE, '-c:v', 'libx264', '-preset', 'slow', '-crf', '20', '-maxrate', '14M', '-bufsize', '28M', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '160k', '-movflags', '+faststart', tmp]);
+      for (const at of ['0.3', '0']) {
+        await run('ffmpeg', ['-y', '-loglevel', 'error', '-ss', at, '-i', tmp, '-frames:v', '1', '-q:v', '2', jpg]).catch(() => {});
+        if (existsSync(jpg)) break;
+      }
+    } catch (e) {
+      throw new Error(e.code === 'ENOENT' ? '需要先安装 ffmpeg 才能插入视频' : '视频转换失败');
+    }
+    copyFileSync(tmp, out);
+    if (existsSync(jpg)) copyFileSync(jpg, poster);
   });
 }

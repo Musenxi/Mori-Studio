@@ -3,7 +3,7 @@
  *   没选中：整篇的结构，点一项选中它
  *   文字、标题：写法、对齐、位置；改字时多出段落样式和粗体斜体
  *   图片：版式、每张图的图注和替代文字、合并拆分；竖滚里单图的环绕、左边、宽
- *   幕间：画布比例，上面每样东西（文字、图片）的内容和角度
+ *   幕间：画布比例，上面每样东西（文字、图片）的内容和角度；视频：版式、图注、替代文字、换一段
  */
 import type { ReactNode } from 'react';
 import { Bold, ImagePlus, Italic, Merge, Plus, RotateCcw, Split, Trash2, Type, X } from 'lucide-react';
@@ -19,8 +19,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useLayout } from './layout-ctx';
 import { InlineField } from './inline-field';
+import { useVideoUpload } from './video-upload';
 import { formatSel, readSel } from './layout-text';
-import { GAP_MAX, GAP_MIN, NAMES, ToolBtn, blockPlain, bleedable, r2, scalable, yOf } from './layout-view';
+import { GAP_MAX, GAP_MIN, NAMES, ToolBtn, blockPlain, bleedable, posterOf, r2, scalable, yOf } from './layout-view';
 
 export function Inspector() {
   const L = useLayout();
@@ -98,6 +99,7 @@ function BlockPanel({ b }: { b: Doc }) {
       )}
       {axis === 'v' && b.type === 'image' && <VImageProps b={b} place={place} />}
       {ops.isImageBlock(b) && <ImageProps b={raw} patch={patch} typePatch={typePatch} />}
+      {b.type === 'video' && <VideoProps b={raw} patch={patch} typePatch={typePatch} />}
       {b.type === 'interlude' && <InterludeProps b={raw} patch={patch} typePatch={typePatch} />}
       {axis === 'h' && b.type !== 'interlude' && <PlaceProps b={b} raw={raw} place={place} />}
     </>
@@ -289,6 +291,25 @@ function InterludeProps({ b, patch, typePatch }: { b: Doc; patch: (p: Doc) => vo
         <div className="flex gap-1">
           <Button size="sm" variant="ghost" className="-ml-3" onClick={() => add({ kind: 'text', text: '', w: 0.3, writing: 'h' })}><Plus size={13} />文字</Button>
           <Button size="sm" variant="ghost" onClick={() => L.pickImage((src) => add({ kind: 'image', src, alt: '', w: 0.24 }))}><Plus size={13} />图片</Button>
+        </div>
+      </Section>
+    </>
+  );
+}
+
+/* ───────────── 视频 ───────────── */
+
+function VideoProps({ b, patch, typePatch }: { b: Doc; patch: (p: Doc) => void; typePatch: (p: Doc) => void }) {
+  const pickVideo = useVideoUpload();
+  const replace = () => pickVideo((r) => patch({ src: `../../assets/${r.path}`, poster: r.poster ? `../../assets/${r.poster}` : undefined }));
+  return (
+    <>
+      <Section><Prop label="版式"><Segmented size="sm" value={b.layout === 'inline' ? 'inline' : 'wide'} onValueChange={(v) => patch({ layout: v })} options={[{ value: 'wide', label: '通栏' }, { value: 'inline', label: '内缩' }]} /></Prop></Section>
+      <Section className="flex gap-2.5">
+        <Thumb src={posterOf(b)} onClick={replace} />
+        <div className="min-w-0 flex-1 space-y-1.5">
+          <Input className="h-8" placeholder="图注" value={b.caption ?? ''} onChange={(e) => typePatch({ caption: e.target.value || undefined })} />
+          <Input className="h-8" placeholder="替代文字" value={b.alt ?? ''} onChange={(e) => typePatch({ alt: e.target.value })} />
         </div>
       </Section>
     </>

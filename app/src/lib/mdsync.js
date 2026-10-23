@@ -1,6 +1,6 @@
 /**
  * Markdown 写作页和 JSON 文档之间的同步层。
- * JSON 是存储，Markdown 只是它的一种“视图”：文本里只有文字、标题和图片（图组、双图、自由排布里的图也只是一行行图片），
+ * JSON 是存储，Markdown 只是它的一种“视图”：文本里只有文字、标题和图片（图组、双图、自由排布里的图也只是一行行图片；视频的写法和图片一样），
  * 每次编辑把文本解析成块，再对回旧块：没动过的块原样保留（包括 tcy 之类 Markdown 写不出的标注、版式、位置、竖排），
  * 改动不大的块沿用 id（划词引用评论靠 id 定位）。
  */
@@ -28,6 +28,7 @@ const mapImg = (o, fn) => (o.src ? { ...o, src: fn(o.src) } : o);
 /** 块里所有图片的路径（单图、图组、自由排布里的图）换一种写法 */
 function mapBlockImages(b, fn) {
   if (b.type === 'image') return mapImg(b, fn);
+  if (b.type === 'video') return { ...mapImg(b, fn), ...(b.poster ? { poster: fn(b.poster) } : {}) };
   if (Array.isArray(b.images)) return { ...b, images: b.images.map((im) => mapImg(im, fn)) };
   if (b.type === 'free') return { ...b, items: b.items.map((it) => (it.kind === 'image' ? mapImg(it, fn) : it)) };
   return b;
@@ -129,8 +130,8 @@ function carry(old, nb) {
 export function fromMarkdown(text, doc, folder = '') {
   const oldBlocks = doc.blocks ?? [];
   const parsed = parseBlocks(text);
-  // 新插入的图片默认与正文同宽（已有的图片对上旧块，沿用旧块的版式）
-  const newBlocks = restoreNoteKinds(parsed.blocks, oldBlocks).map((b) => mapBlockImages(b.type === 'image' && !b.layout ? { ...b, layout: 'inline' } : b, addAsset(folder)));
+  // 新插入的图片、视频默认与正文同宽（已有的对上旧块，沿用旧块的版式）
+  const newBlocks = restoreNoteKinds(parsed.blocks, oldBlocks).map((b) => mapBlockImages((b.type === 'image' || b.type === 'video') && !b.layout ? { ...b, layout: 'inline' } : b, addAsset(folder)));
   const oldItems = mdItems(oldBlocks);
   const newItems = mdItems(newBlocks.map((b, i) => ({ ...b, id: String(i) })));
   const match = matchItems(oldItems, newItems);
@@ -174,7 +175,7 @@ export function fromMarkdown(text, doc, folder = '') {
     if (!old) return { ...nb, id: newId() };
     if (!slots.length) return old.type === 'free' && hasItems.has(old.id) ? { ...old, items: old.items.filter((it) => it.kind === 'text') } : old;
     switch (old.type) {
-      case 'image': return { ...old, ...patchImage(old, slots[0].n) };
+      case 'image': case 'video': return { ...old, ...patchImage(old, slots[0].n) };
       case 'free': {
         const alive = new Map(slots.map((s) => [s.o.k, s.n]));
         const items = old.items.flatMap((it, k) => (it.kind !== 'image' ? [it] : alive.has(k) ? [patchImage(it, alive.get(k))] : []));

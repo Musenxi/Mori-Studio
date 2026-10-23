@@ -61,6 +61,39 @@ export function saveAsset(root, folder, name, buffer) {
   return rel;
 }
 
+/** 正文里视频块用的视频文件 */
+export const VIDEO_EXT = new Set(['.mp4', '.m4v', '.mov', '.webm']);
+
+/**
+ * 一段视频（正文里的视频块）存放的名字：<名字>.mp4 和封面 <名字>.poster.jpg。
+ * 不和别的图同名：和图片同名的 .mp4 会被当成那张图的实况视频
+ */
+export function videoNames(root, folder, name) {
+  folder = cleanRel(folder, { folder: true });
+  const base = basename(name).replace(/\.[^.]+$/, '').replace(/[^\w.\-一-龥]+/g, '_') || 'video';
+  const at = (n) => (folder ? `${folder}/${n}` : n);
+  const taken = (stem) => [`${stem}.mp4`, `${stem}.poster.jpg`, ...[...IMAGE_EXT, '.heic', '.heif'].map((e) => stem + e)].some((n) => existsSync(abs(root, at(n))));
+  let stem = base, k = 1;
+  while (taken(stem)) stem = `${base}-${++k}`;
+  return { video: at(`${stem}.mp4`), poster: at(`${stem}.poster.jpg`) };
+}
+
+/** 视频块没写封面、但视频旁边有 <名字>.poster.jpg 的，补上（Markdown 里插入、手写的视频只有地址） */
+export function withVideoPosters(root, doc) {
+  if (!Array.isArray(doc?.blocks)) return doc;
+  let changed = false;
+  const blocks = doc.blocks.map((b) => {
+    if (b?.type !== 'video' || b.poster || typeof b.src !== 'string' || /^[a-z]+:/i.test(b.src)) return b;
+    const at = b.src.indexOf('assets/');
+    if (at < 0) return b;
+    const rel = b.src.slice(at + 'assets/'.length).replace(/\.[^./]+$/, '.poster.jpg');
+    if (!existsSync(abs(root, rel))) return b;
+    changed = true;
+    return { ...b, poster: b.src.slice(0, at + 'assets/'.length) + rel };
+  });
+  return changed ? { ...doc, blocks } : doc;
+}
+
 function freeName(root, folder, name, except) {
   const ext = extname(name), stem = name.slice(0, name.length - ext.length);
   const at = (n) => (folder ? `${folder}/${n}` : n);
@@ -213,7 +246,8 @@ const writeIndex = (root, idx) => { mkdirSync(dirname(indexFile(root)), { recurs
 
 const manifestFile = (root) => join(root, 'src/assets/cdn.json');
 export const readManifest = (root) => { try { return JSON.parse(readFileSync(manifestFile(root), 'utf8')); } catch { return { base: '', images: {} }; } };
-export const writeManifest = (root, m) => writeFileSync(manifestFile(root), JSON.stringify({ base: m.base, images: Object.fromEntries(Object.entries(m.images).sort(([a], [b]) => a.localeCompare(b))) }, null, 2) + '\n');
+const sorted = (o) => Object.fromEntries(Object.entries(o).sort(([a], [b]) => a.localeCompare(b)));
+export const writeManifest = (root, m) => writeFileSync(manifestFile(root), JSON.stringify({ base: m.base, images: sorted(m.images), ...(m.videos && Object.keys(m.videos).length ? { videos: sorted(m.videos) } : {}) }, null, 2) + '\n');
 
 /** 图片移动后清单换键（外链不变，不用重新上传）；删掉的去掉 */
 function renameInManifest(root, map) {

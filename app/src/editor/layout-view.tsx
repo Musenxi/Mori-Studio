@@ -11,7 +11,7 @@
  * 这个文件里还有两种读法共用的块的画法（图、图组、自由排布、地图、幕间、文字框）。
  */
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { MapPin } from 'lucide-react';
+import { MapPin, Play } from 'lucide-react';
 import { assetUrl } from '@/lib/api';
 import { cn } from '@/lib/cn';
 import type { Doc } from '@/lib/types';
@@ -26,7 +26,7 @@ export type { PlaceInfo };
 export const clamp = (v: number, a: number, b: number) => Math.min(b, Math.max(a, v));
 export const r2 = (v: number) => Math.round(v * 100) / 100;
 export const px = (n: number) => `${n}px`;
-export const NAMES: Record<string, string> = { head: '标题', text: '文字', image: '单图', pair: '双图', strip: '图组', grid: '网格', free: '自由排布', map: '地图', interlude: '幕间' };
+export const NAMES: Record<string, string> = { head: '标题', text: '文字', image: '单图', pair: '双图', strip: '图组', grid: '网格', free: '自由排布', map: '地图', interlude: '幕间', video: '视频' };
 /** 舞台占可用高度的比例：小一点能一眼看到更多 */
 export const ZOOMS: Record<string, number> = { s: 0.5, m: 0.72, l: 1 };
 export const ZOOM_KEY = 'mori-studio-layout-zoom';
@@ -34,7 +34,7 @@ const imgSrc = (src?: string) => (!src ? '' : /^(https?:|data:|\/)/.test(src) ? 
 /** 没设上下位置时在哪：都在版心里居中（文字框一样高，所以文字顶端在同一条线上） */
 export const yOf = (_b: Doc) => 0.5;
 /** 按比例缩放的块：图（文字是自由拖宽高的文本框，见 startBox） */
-export const scalable = (b: Doc) => isImage(b);
+export const scalable = (b: Doc) => isImage(b) || b.type === 'video';
 const isImage = (b: Doc) => ['image', 'pair', 'strip', 'grid', 'free'].includes(b.type);
 /** 能满屏出血的块：图 */
 export const bleedable = isImage;
@@ -397,6 +397,14 @@ export function Img({ src, style, className }: { src?: string; style?: React.CSS
   return <img src={imgSrc(src)} alt="" draggable={false} loading="lazy" className={cn('block max-w-none bg-muted object-cover', className)} style={style} />;
 }
 
+/** 视频的封面：没写的（Markdown 里刚插入的）按约定的名字找 <名字>.poster.jpg，保存时 Studio 会补进去 */
+export const posterOf = (b: Doc): string | undefined => b.poster ?? (typeof b.src === 'string' && !/^[a-z]+:/i.test(b.src) ? b.src.replace(/\.[^./]+$/, '.poster.jpg') : undefined);
+
+/** 视频的封面上画一个播放标记（排版里只看封面，播放在预览里看） */
+export const PlayMark = () => (
+  <span className="pointer-events-none absolute top-1/2 left-1/2 grid size-10 -translate-1/2 place-items-center rounded-full bg-black/45 text-white"><Play size={16} className="translate-x-px" /></span>
+);
+
 /** 图下面的一行图注（图组里前面是第几张 / 共几张）；宽度跟着图走（w-0 min-w-full），不把图撑宽 */
 export const Cap = ({ text, size, no }: { text?: string; size: number; no?: string }) => text || no ? <p className="mt-1.5 flex w-0 min-w-full items-baseline gap-[.8em] text-(length:--fs) leading-snug text-muted-foreground" style={{ '--fs': px(size) }}>{no && <span className="mono shrink-0 tabular-nums">{no}</span>}{text}</p> : null;
 
@@ -628,6 +636,8 @@ function Face({ b, g, scale, places, here, active, editing, onPatch }: { b: Doc;
     }
     case 'image':
       return <figure className="relative max-w-(--mw)" style={{ '--mw': px(g.S * 2.2), '--h': px(H) }}><Img src={b.src} className="h-(--h) w-auto" />{cap(b.caption)}</figure>;
+    case 'video':
+      return <figure className="relative max-w-(--mw)" style={{ '--mw': px(g.S * 2.2), '--h': px(H) }}><span className="relative block"><Img src={posterOf(b)} className="h-(--h) w-auto" /><PlayMark /></span>{cap(b.caption)}</figure>;
     case 'pair':
       return <figure><div className={cn('flex', !bleed && 'gap-(--gap)')} style={{ '--gap': px(fs * 0.8), '--h': px(H) }}>{b.images.map((im: Doc, i: number) => <figure key={i} className="relative"><Img src={im.src} className="h-(--h) w-auto" />{cap(im.caption)}</figure>)}</div></figure>;
     case 'grid': {
