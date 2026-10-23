@@ -3,15 +3,15 @@
  * 视图按横向读法把整篇排成一条：相邻的文字是一列，图片、图组、地图各是一块（见 flow.mjs 的 columns）。
  * 一项的 key 是它第一个块的 id。
  * 横滚和竖滚各存各的：块上的 h = { y, scale, gap, bleed, writing, align, pos }（横滚），v = { writing, align, pos }（竖滚）。
- * 竖滚里单图还有 v = { x, bw, wrap }：左边、宽（页宽的比例，高按原图比例）、文字环绕（start 图在左 / end 图在右）。
+ * 竖滚里单图、视频还有 v = { x, bw }：左边、宽（页宽的比例，高按原比例）；单图还有 wrap 文字环绕（start 图在左 / end 图在右）。
  */
 import { columns, TEXT_BLOCKS, WRITING_BLOCKS } from 'astro-mori/flow';
 
 /** 横滚里的摆法：上下位置、缩放、和前一块的间距（标准间距的倍数）、图片满屏出血、浮起来的左右位置（屏高的倍数） */
 const PLACE_KEYS = ['y', 'scale', 'gap', 'bleed', 'x'];
 const place = (o) => Object.fromEntries(PLACE_KEYS.filter((k) => o[k] !== undefined).map((k) => [k, o[k]]));
-/** 竖滚里单图的摆法，项上叫 vx / vbw / vwrap（和文字一样） */
-const vplace = (b) => (b.type === 'image' ? Object.fromEntries([['vx', b.v?.x], ['vbw', b.v?.bw], ['vwrap', b.v?.wrap]].filter(([, v]) => v !== undefined)) : {});
+/** 竖滚里单图、视频的摆法，项上叫 vx / vbw / vwrap（和文字一样） */
+const vplace = (b) => (b.type === 'image' || b.type === 'video' ? Object.fromEntries([['vx', b.v?.x], ['vbw', b.v?.bw], ['vwrap', b.v?.wrap]].filter(([, v]) => v !== undefined)) : {});
 
 /**
  * 排版视图里的项，按顺序。每项：{ key, type, y?, scale?, ... }
@@ -77,8 +77,8 @@ export function setPlace(doc, key, patch, axis = 'h') {
     // 字号、行距、文本框的宽高：一列里每个文字块都写（和对齐一样）；竖滚里文本框的左右位置是 vx（写成 v.x）
     for (const k of ['fs', 'lh', 'bw', 'bh']) if (k in patch && text) put(o, axis, { [k]: patch[k] });
     if ('vx' in patch && text) put(o, 'v', { x: patch.vx });
-    // 竖滚里的单图：左边、宽、文字环绕
-    if (it.type === 'image' && axis === 'v') for (const [k, side] of [['vx', 'x'], ['bw', 'bw'], ['wrap', 'wrap']]) if (k in patch) put(o, 'v', { [side]: patch[k] });
+    // 竖滚里的单图、视频：左边、宽；单图还有文字环绕
+    if ((it.type === 'image' || it.type === 'video') && axis === 'v') for (const [k, side] of [['vx', 'x'], ['bw', 'bw'], ...(it.type === 'image' ? [['wrap', 'wrap']] : [])]) if (k in patch) put(o, 'v', { [side]: patch[k] });
     return o;
   }) };
 }

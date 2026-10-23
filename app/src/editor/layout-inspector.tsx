@@ -97,7 +97,7 @@ function BlockPanel({ b }: { b: Doc }) {
       {b.type === 'map' && (
         <Section><Prop label="范围"><Segmented size="sm" value={b.scope ?? 'region'} onValueChange={(v) => patch({ scope: v })} options={[{ value: 'region', label: '所在区域' }, { value: 'route', label: '全程' }, { value: 'near', label: '这一处' }]} /></Prop></Section>
       )}
-      {axis === 'v' && b.type === 'image' && <VImageProps b={b} place={place} />}
+      {axis === 'v' && (b.type === 'image' || b.type === 'video') && <VImageProps b={b} place={place} />}
       {ops.isImageBlock(b) && <ImageProps b={raw} patch={patch} typePatch={typePatch} />}
       {b.type === 'video' && <VideoProps b={raw} patch={patch} typePatch={typePatch} />}
       {b.type === 'interlude' && <InterludeProps b={raw} patch={patch} typePatch={typePatch} />}
@@ -177,12 +177,12 @@ function BoxNum({ label, value, max, onChange }: { label: string; value?: number
   );
 }
 
-/* ───────────── 竖滚里单图的摆法 ───────────── */
+/* ───────────── 竖滚里单图、视频的摆法 ───────────── */
 
 function VImageProps({ b, place }: { b: Doc; place: (p: Doc) => void }) {
   return (
     <Section>
-      <Prop label="环绕"><Segmented size="sm" value={b.vwrap ?? 'none'} onValueChange={(v) => place({ wrap: v === 'none' ? undefined : v, ...(v === 'none' ? {} : { vx: undefined }) })} options={[{ value: 'none', label: '无' }, { value: 'start', label: '图在左' }, { value: 'end', label: '图在右' }]} /></Prop>
+      {b.type === 'image' && <Prop label="环绕"><Segmented size="sm" value={b.vwrap ?? 'none'} onValueChange={(v) => place({ wrap: v === 'none' ? undefined : v, ...(v === 'none' ? {} : { vx: undefined }) })} options={[{ value: 'none', label: '无' }, { value: 'start', label: '图在左' }, { value: 'end', label: '图在右' }]} /></Prop>}
       {!b.vwrap && <BoxNum label="左边" value={b.vx} max={100} onChange={(v) => place({ vx: v })} />}
       <BoxNum label="宽" value={b.vbw} max={100} onChange={(v) => place({ bw: v })} />
     </Section>

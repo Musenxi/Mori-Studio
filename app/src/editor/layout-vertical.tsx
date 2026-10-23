@@ -6,7 +6,7 @@
  *   上下拖动 → 换顺序（竖向读法里没有“上下位置”和“大小”，那是横滚才有的）
  *   文本框：左右拖 → 放在页面的哪里（x，页宽的比例，靠左 / 居中 / 靠右和原来的栏位会吸住）；
  *   右边、下边、右下角的拖柄 → 宽（bw，页宽的比例）、高（bh，屏高的倍数；这里一屏高按 0.69 个页宽算，和主题的版心比例差不多）
- * 单图：左右拖 → 放在页面的哪里（vx），角上的圆点 → 宽（vbw，高按原图比例）；
+ * 单图、视频：左右拖 → 放在页面的哪里（vx），角上的圆点 → 宽（vbw，高按原比例）；单图还能：
  *   拖到一列横排文字的左边或右边三成里松手 → 浮在这列文字里，文字绕着图排（vwrap：start 图在左 / end 图在右）；
  *   环绕的图左右拖是换边，上下拖到两块之间就不再环绕
  */
@@ -66,8 +66,8 @@ export function VerticalLayout() {
     // 文本框左右拖是摆位置（第一下往哪边动就是哪种），上下拖是换顺序
     const el = e.currentTarget as HTMLElement, w = el.getBoundingClientRect().width / W;
     const x0 = (el.getBoundingClientRect().left - page.current!.getBoundingClientRect().left) / W;
-    const image = b.type === 'image', wrapped = image && !!el.closest('[data-wrap]');
-    const sideways = (ops.isTextItem(b) || image) && !el.parentElement?.closest('[data-vv]');
+    const image = b.type === 'image', media = image || b.type === 'video', wrapped = image && !!el.closest('[data-wrap]');
+    const sideways = (ops.isTextItem(b) || media) && !el.parentElement?.closest('[data-vv]');
     // 环绕的图：左右拖是换边，按指针在那列文字的哪一半算
     const wrapBox = wrapped ? el.closest<HTMLElement>('[data-wrap]')!.getBoundingClientRect() : null;
     let moved = false, mode: 'x' | 'y' | null = null, last: Drag = { key: b.key }, raf = 0, py = e.clientY;
@@ -200,9 +200,10 @@ export function VerticalLayout() {
     // 摆过的文本框：左边在页面的 vx 处（没设是第 3 栏），宽 vbw；竖排的宽跟着字，vbw 是最小宽度
     const boxed = ops.isTextItem(b) && w === undefined && (b.vx !== undefined || b.vbw !== undefined);
     // 排过的单图：宽 vbw，左边 vx（只设了宽的居中）；环绕的图默认三成页宽
-    const placed = b.type === 'image' && !float && (b.vx !== undefined || b.vbw !== undefined);
+    const media = b.type === 'image' || b.type === 'video';
+    const placed = media && !float && (b.vx !== undefined || b.vbw !== undefined);
     const vert = b.vwriting === 'v';
-    const bw = float ? W * (b.vbw ?? WRAP_W) : boxed ? (vert ? 0 : W * (b.vbw ?? 0.5)) : w ?? W * (b.type === 'image' ? b.vbw ?? widthOf(b) : widthOf(b));
+    const bw = float ? W * (b.vbw ?? WRAP_W) : boxed ? (vert ? 0 : W * (b.vbw ?? 0.5)) : w ?? W * (media ? b.vbw ?? widthOf(b) : widthOf(b));
     const left = boxed ? W * (b.vx ?? 0.25) : placed ? W * (b.vx ?? (1 - (b.vbw ?? widthOf(b))) / 2) : undefined;
     return (
       <VBlock key={b.key} b={b} W={bw} left={left} float={float} seq={i} selected={sel === b.key} editing={editing} drag={d}
@@ -281,12 +282,12 @@ function VBlock({ b, W, left, float, seq, selected, editing, drag, onDown, onBox
       style={{ '--w': W ? px(W) : undefined, '--dy': px(drag?.dy ?? 0), '--ml': left !== undefined ? px(left) : undefined }}>
       {children}
       {selected && !editing && ops.isTextItem(b) && <BoxHandles rtl={false} onBox={onBox} />}
-      {selected && !editing && b.type === 'image' && (
+      {selected && !editing && (b.type === 'image' || b.type === 'video') && (
         <span onPointerDown={(e) => onSize(e, float === 'end' ? -1 : 1)} aria-label="拖动改大小" className={cn('absolute -bottom-2.75 z-20 grid h-5.5 w-5.5 place-items-center rounded-full bg-popover shadow-pop', float === 'end' ? '-left-2.75 cursor-nesw-resize' : '-right-2.75 cursor-nwse-resize')}>
           <i className="h-2 w-2 rounded-full bg-primary" />
         </span>
       )}
-      {drag?.bw !== undefined && b.type === 'image' && <span className="mono pointer-events-none absolute -top-7 right-0 rounded-full bg-primary px-2 py-0.5 text-11 text-primary-foreground">{Math.round(drag.bw * 100)}%</span>}
+      {drag?.bw !== undefined && (b.type === 'image' || b.type === 'video') && <span className="mono pointer-events-none absolute -top-7 right-0 rounded-full bg-primary px-2 py-0.5 text-11 text-primary-foreground">{Math.round(drag.bw * 100)}%</span>}
     </div>
   );
 }

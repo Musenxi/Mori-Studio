@@ -177,3 +177,11 @@ test('竖滚里的单图：左边、宽、环绕写在 v 里，项上是 vx / vb
   assert.equal(d.blocks.find((b) => b.id === 's01').v, undefined);
   assert.deepEqual(d.blocks.find((b) => b.id === 's01').h, { y: 0.2 });
 });
+
+test('竖滚里的视频：左边、宽写在 v 里，项上是 vx / vbw；没有环绕', () => {
+  const d0 = { blocks: [{ id: 'v1', type: 'video', src: '../../assets/a.mp4', alt: '', layout: 'wide' }, { id: 'b1', type: 'p', text: 'x' }] };
+  const d = ops.setPlace(d0, 'v1', { vx: 0.2, bw: 0.5, wrap: 'start' }, 'v');
+  assert.deepEqual(d.blocks[0].v, { x: 0.2, bw: 0.5 });
+  const it = ops.itemsOf(d)[0];
+  assert.deepEqual([it.vx, it.vbw, it.vwrap], [0.2, 0.5, undefined]);
+});
